@@ -1,3 +1,5 @@
+# VISNUX INSTALL SCRIPT <3
+
 !/bin/bash
 
 if [ "$EUID" -ne 0 ]; then
