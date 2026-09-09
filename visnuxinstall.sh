@@ -37,7 +37,7 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
 }
 
-# Explicitly pre-declare ALL variables so 'set -u' never triggers an unbound variable error
+# Pre-declare variables to prevent unbound variable crashes under set -u
 USER_=""
 PASSWORD=""
 HOST=""
@@ -169,13 +169,6 @@ while true; do
             echo "PS: we dont save anything so you gotta do evreything again :("
             break
         else
-            DE_PKGS=""
-            if [ "$DE" == "de_kde" ]; then
-                DE_PKGS="plasma-desktop sddm konsole dolphin"
-            elif [ "$DE" == "de_xfce" ]; then
-                DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
-            fi
-
             TIMEZONE=$(curl -s --max-time 5 https://ipinfo.io/timezone | tr -d '[:space:]')
             if [ -z "$TIMEZONE" ] || [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
                 TIMEZONE="UTC"
@@ -183,8 +176,49 @@ while true; do
 
             INIT_OK=true
 
-            # systemd
+            # Set up Artix Repositories if using OpenRC or Runit
+            if [ "$INIT" == "init_openrc" ] || [ "$INIT" == "init_runit" ]; then
+                mkdir -p /mnt/etc/pacman.d
+                cat <<'ARTIXMIRROR' > /mnt/etc/pacman.d/mirrorlist-artix
+Server = https://mirror1.artixlinux.org/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.ding.im/$repo/os/$arch
+ARTIXMIRROR
+
+                cat <<'ARTIXPAC' > /etc/pacman.artix.conf
+[options]
+HoldPkg     = pacman glibc
+Architecture = auto
+LocalFileSigLevel = Optional
+
+[system]
+Include = /mnt/etc/pacman.d/mirrorlist-artix
+
+[world]
+Include = /mnt/etc/pacman.d/mirrorlist-artix
+
+[galaxy]
+Include = /mnt/etc/pacman.d/mirrorlist-artix
+
+[universe]
+Include = /mnt/etc/pacman.d/mirrorlist-artix
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+ARTIXPAC
+            fi
+
+            # --------------------------
+            # SYSTEMD INSTALLATION
+            # --------------------------
             if [ "$INIT" == "init_systemd" ]; then
+                DE_PKGS=""
+                if [ "$DE" == "de_kde" ]; then
+                    DE_PKGS="plasma-desktop sddm konsole dolphin"
+                elif [ "$DE" == "de_xfce" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
+                fi
+
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt >> /mnt/etc/fstab
@@ -238,10 +272,21 @@ EOF
                 fi
             fi
 
-            # openrc
+            # --------------------------
+            # OPENRC INSTALLATION (ARTIX REPOS)
+            # --------------------------
             if [ "$INIT" == "init_openrc" ]; then
-                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
+                DE_PKGS=""
+                if [ "$DE" == "de_kde" ]; then
+                    DE_PKGS="plasma-desktop sddm-openrc konsole dolphin"
+                elif [ "$DE" == "de_xfce" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies lightdm-openrc lightdm-gtk-greeter"
+                fi
+
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware openrc openrc-systemdcompat elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                
                 if [ "$INIT_OK" == "true" ]; then
+                    cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
 
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
@@ -263,7 +308,7 @@ cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
-ID_LIKE=arch
+ID_LIKE=artix
 BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
@@ -276,27 +321,13 @@ useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-useradd -m -G wheel builduser
-echo "builduser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builduser-temp
-
-su - builduser -c '
-    git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
-    cd /tmp/paru-bin &&
-    makepkg -si --noconfirm --needed
-' || { echo "AUR_HELPER_FAILED"; exit 1; }
-
-su - builduser -c 'paru -S --noconfirm openrc openrc-systemdcompat networkmanager-openrc' || { echo "OPENRC_INSTALL_FAILED"; exit 1; }
-
-rm -f /etc/sudoers.d/builduser-temp
-userdel -r builduser
-
 mkinitcpio -P
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
 rc-update add NetworkManager default
-rc-update add dbus default
+rc-update add elogind default
 
 if [ "$DE" == "de_kde" ]; then
     rc-update add sddm default
@@ -308,10 +339,21 @@ EOF
                 fi
             fi
             
-            # runit
+            # --------------------------
+            # RUNIT INSTALLATION (ARTIX REPOS)
+            # --------------------------
             if [ "$INIT" == "init_runit" ]; then
-                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
+                DE_PKGS=""
+                if [ "$DE" == "de_kde" ]; then
+                    DE_PKGS="plasma-desktop sddm-runit konsole dolphin"
+                elif [ "$DE" == "de_xfce" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies lightdm-runit lightdm-gtk-greeter"
+                fi
+
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware runit runit-systemdcompat elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                
                 if [ "$INIT_OK" == "true" ]; then
+                    cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
 
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
@@ -333,7 +375,7 @@ cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
-ID_LIKE=arch
+ID_LIKE=artix
 BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
@@ -346,49 +388,17 @@ useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-useradd -m -G wheel builduser
-echo "builduser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builduser-temp
-
-su - builduser -c '
-    git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
-    cd /tmp/paru-bin &&
-    makepkg -si --noconfirm --needed
-' || { echo "AUR_HELPER_FAILED"; exit 1; }
-
-su - builduser -c 'paru -S --noconfirm runit' || { echo "RUNIT_INSTALL_FAILED"; exit 1; }
-
-rm -f /etc/sudoers.d/builduser-temp
-userdel -r builduser
-
 mkinitcpio -P
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-mkdir -p /etc/runit/sv/NetworkManager
-cat <<SVEOF > /etc/runit/sv/NetworkManager/run
-#!/bin/sh
-exec /usr/bin/NetworkManager --no-daemon
-SVEOF
-chmod +x /etc/runit/sv/NetworkManager/run
-mkdir -p /etc/runit/runsvdir/default/
 ln -sf /etc/runit/sv/NetworkManager /etc/runit/runsvdir/default/
+ln -sf /etc/runit/sv/elogind /etc/runit/runsvdir/default/
 
 if [ "$DE" == "de_kde" ]; then
-    mkdir -p /etc/runit/sv/sddm
-    cat <<SVEOF > /etc/runit/sv/sddm/run
-#!/bin/sh
-exec sddm
-SVEOF
-    chmod +x /etc/runit/sv/sddm/run
     ln -sf /etc/runit/sv/sddm /etc/runit/runsvdir/default/
 elif [ "$DE" == "de_xfce" ]; then
-    mkdir -p /etc/runit/sv/lightdm
-    cat <<SVEOF > /etc/runit/sv/lightdm/run
-#!/bin/sh
-exec lightdm
-SVEOF
-    chmod +x /etc/runit/sv/lightdm/run
     ln -sf /etc/runit/sv/lightdm /etc/runit/runsvdir/default/
 fi
 EOF
