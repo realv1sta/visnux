@@ -38,6 +38,7 @@ refresh_mirrors() {
 }
 
 USER_=""
+PASSWORD=""
 HOST=""
 ROOT=""
 INIT=""
@@ -122,11 +123,9 @@ while true; do
         if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
             if refresh_mirrors; then
-                MIRRORS_OK=true
                 dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
             else
-                MIRRORS_OK=false
-                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use the default mirrorlist at install time." 0 0; clear
+                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use default mirrorlist." 0 0; clear
             fi
         fi
     fi
@@ -172,7 +171,7 @@ while true; do
                 DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
             fi
 
-            TIMEZONE=$(curl -s https://ipinfo.io/timezone)
+            TIMEZONE=$(curl -s --max-time 5 https://ipinfo.io/timezone | tr -d '[:space:]')
             if [ -z "$TIMEZONE" ] || [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
                 TIMEZONE="UTC"
             fi
@@ -182,10 +181,11 @@ while true; do
             # systemd
             if [ "$INIT" == "init_systemd" ]; then
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
-                genfstab -U /mnt >> /mnt/etc/fstab
-                
-                arch-chroot /mnt /bin/bash <<EOF
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+                if [ "$INIT_OK" == "true" ]; then
+                    genfstab -U /mnt >> /mnt/etc/fstab
+                    
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
@@ -214,7 +214,7 @@ LOGO=visnux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel $USER_
+useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -229,17 +229,18 @@ elif [ "$DE" == "de_xfce" ]; then
     systemctl enable lightdm
 fi
 EOF
-                [ $? -ne 0 ] && INIT_OK=false
+                    [ $? -ne 0 ] && INIT_OK=false
+                fi
             fi
 
             # openrc
             if [ "$INIT" == "init_openrc" ]; then
-                # Added dbus, dbus-glib, and elogind to supply essential display manager interfaces
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
-                genfstab -U /mnt >> /mnt/etc/fstab
+                if [ "$INIT_OK" == "true" ]; then
+                    genfstab -U /mnt >> /mnt/etc/fstab
 
-                arch-chroot /mnt /bin/bash <<EOF
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
@@ -266,7 +267,7 @@ LOGO=visnux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel $USER_
+useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -298,16 +299,18 @@ elif [ "$DE" == "de_xfce" ]; then
     rc-update add lightdm default
 fi
 EOF
-                [ $? -ne 0 ] && INIT_OK=false
+                    [ $? -ne 0 ] && INIT_OK=false
+                fi
             fi
             
             # runit
             if [ "$INIT" == "init_runit" ]; then
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
-                genfstab -U /mnt >> /mnt/etc/fstab
+                if [ "$INIT_OK" == "true" ]; then
+                    genfstab -U /mnt >> /mnt/etc/fstab
 
-                arch-chroot /mnt /bin/bash <<EOF
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
@@ -334,7 +337,7 @@ LOGO=visnux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel $USER_
+useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -384,11 +387,12 @@ SVEOF
     ln -sf /etc/runit/sv/lightdm /etc/runit/runsvdir/default/
 fi
 EOF
-                [ $? -ne 0 ] && INIT_OK=false
+                    [ $? -ne 0 ] && INIT_OK=false
+                fi
             fi
 
             if [ "$INIT_OK" == "false" ]; then
-                dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, idk man" 0 0; clear
+                dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, check internet connectivity or disk mounts." 0 0; clear
             else
                 dialog --title "All done!" --msgbox "You installed! You can reboot the system." 0 0; clear
             fi
