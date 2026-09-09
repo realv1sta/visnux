@@ -40,14 +40,26 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring
 }
 
+USER_=""
+HOST=""
+ROOT=""
+INIT=""
+DE=""
+
 while true; do
-    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 1 "User Account" 2 "Hostname" 3 "Root Password" 4 "Init Selection" 5 "DE selection" 6 "Install" 3>&1 1>&2 2>&3 3>&-)
+    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 \
+        1 "User Account" \
+        2 "Hostname" \
+        3 "Root Password" \
+        4 "Init Selection" \
+        5 "DE selection" \
+        6 "Install" 3>&1 1>&2 2>&3 3>&-)
     
     STATUS=$?
     clear
 
     if [ $STATUS -ne 0 ]; then
-        echo "You stopped the Instalation Process"
+        echo "You stopped the Installation Process"
         break
     fi
     
@@ -66,12 +78,12 @@ while true; do
             PASSWORD2=$(dialog --title "Password" --insecure --passwordbox "Please retype the password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
             
             if [ -z "$PASSWORD" ]; then
-                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
+                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didn't match, try again" 0 0; clear
             elif [ "$PASSWORD" == "$PASSWORD2" ]; then
                 dialog --title "Password Set!" --msgbox "Password has been set!" 0 0; clear
                 break
             else
-                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
+                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didn't match, try again" 0 0; clear
             fi
         done
     fi
@@ -105,7 +117,10 @@ while true; do
     fi
    
     if [ "$MENU" == "4" ]; then
-        INIT=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 3 1 "systemd" 2 "openrc" 3 "runit" 3>&1 1>&2 2>&3 3>&-); clear
+        INIT=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 3 \
+            "init_systemd" "systemd" \
+            "init_openrc" "openrc" \
+            "init_runit" "runit" 3>&1 1>&2 2>&3 3>&-); clear
 
         if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
@@ -120,7 +135,9 @@ while true; do
     fi
    
     if [ "$MENU" == "5" ]; then
-        DE=$(dialog --title "DE Selection" --menu "Choose your prefered DE: " 12 40 2 1 "KDE Plasma" 2 "XFCE4" 3>&1 1>&2 2>&3 3>&-); clear
+        DE=$(dialog --title "DE Selection" --menu "Choose your prefered DE: " 12 40 2 \
+            "de_kde" "KDE Plasma" \
+            "de_xfce" "XFCE4" 3>&1 1>&2 2>&3 3>&-); clear
     fi
    
     if [ "$MENU" == "6" ]; then
@@ -142,23 +159,22 @@ while true; do
         fi
 
         dialog --title "Warning!" --yesno "If you click confirm, Visnux Linux will install on your disk/partition. THIS ACTION CANT BE REVERSED! Soo do it at ur own risk <3" 0 0
-       
+        
         STATUS=$?
         clear
       
         if [ $STATUS -ne 0 ]; then
-            echo "You stopped the Instalation Process"
+            echo "You stopped the Installation Process"
             echo "PS: we dont save anything so you gotta do evreything again :("
             break
         else
             DE_PKGS=""
-            if [ "$DE" == "1" ]; then
+            if [ "$DE" == "de_kde" ]; then
                 DE_PKGS="plasma-desktop sddm konsole dolphin"
-            elif [ "$DE" == "2" ]; then
+            elif [ "$DE" == "de_xfce" ]; then
                 DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
             fi
 
-            # Figure out a timezone up front so hwclock has something sane to work with
             TIMEZONE=$(curl -s https://ipinfo.io/timezone)
             if [ -z "$TIMEZONE" ] || [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
                 TIMEZONE="UTC"
@@ -166,8 +182,8 @@ while true; do
 
             INIT_OK=true
 
-#systemd
-            if [ "$INIT" == "1" ]; then
+            # systemd
+            if [ "$INIT" == "init_systemd" ]; then
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
                 
@@ -210,17 +226,17 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 systemctl enable NetworkManager
 
-if [ "$DE" == "1" ]; then
+if [ "$DE" == "de_kde" ]; then
     systemctl enable sddm
-elif [ "$DE" == "2" ]; then
+elif [ "$DE" == "de_xfce" ]; then
     systemctl enable lightdm
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
-#openrc
-            if [ "$INIT" == "2" ]; then
+            # openrc
+            if [ "$INIT" == "init_openrc" ]; then
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -266,11 +282,9 @@ su - builduser -c '
 
 su - builduser -c 'paru -S --noconfirm openrc openrc-systemdcompat networkmanager-openrc' || { echo "OPENRC_INSTALL_FAILED"; exit 1; }
 
-# Clean up the temporary build user's passwordless sudo
 rm -f /etc/sudoers.d/builduser-temp
 userdel -r builduser
 
-# mkinitcpio must run AFTER openrc is in place, since it can change udev/init hooks
 mkinitcpio -P
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
@@ -278,17 +292,17 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 rc-update add NetworkManager default
 
-if [ "$DE" == "1" ]; then
+if [ "$DE" == "de_kde" ]; then
     rc-update add sddm default
-elif [ "$DE" == "2" ]; then
+elif [ "$DE" == "de_xfce" ]; then
     rc-update add lightdm default
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
             
-#runit
-            if [ "$INIT" == "3" ]; then
+            # runit
+            if [ "$INIT" == "init_runit" ]; then
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -324,7 +338,6 @@ useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-# --- Temporary build user to compile runit from the AUR ---
 useradd -m -G wheel builduser
 echo "builduser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builduser-temp
 
@@ -344,18 +357,31 @@ mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-mkdir -p /etc/runit/sv/NetworkManager/log
+mkdir -p /etc/runit/sv/NetworkManager
 cat <<SVEOF > /etc/runit/sv/NetworkManager/run
 #!/bin/sh
 exec /usr/bin/NetworkManager --no-daemon
 SVEOF
 chmod +x /etc/runit/sv/NetworkManager/run
-ln -s /etc/runit/sv/NetworkManager /etc/runit/runsvdir/default/
+mkdir -p /etc/runit/runsvdir/default/
+ln -sf /etc/runit/sv/NetworkManager /etc/runit/runsvdir/default/
 
-if [ "$DE" == "1" ]; then
-    ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/
-elif [ "$DE" == "2" ]; then
-    ln -s /etc/runit/sv/lightdm /etc/runit/runsvdir/default/
+if [ "$DE" == "de_kde" ]; then
+    mkdir -p /etc/runit/sv/sddm
+    cat <<SVEOF > /etc/runit/sv/sddm/run
+#!/bin/sh
+exec sddm
+SVEOF
+    chmod +x /etc/runit/sv/sddm/run
+    ln -sf /etc/runit/sv/sddm /etc/runit/runsvdir/default/
+elif [ "$DE" == "de_xfce" ]; then
+    mkdir -p /etc/runit/sv/lightdm
+    cat <<SVEOF > /etc/runit/sv/lightdm/run
+#!/bin/sh
+exec lightdm
+SVEOF
+    chmod +x /etc/runit/sv/lightdm/run
+    ln -sf /etc/runit/sv/lightdm /etc/runit/runsvdir/default/
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
