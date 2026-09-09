@@ -13,7 +13,6 @@ check_mount() {
 }
 
 refresh_mirrors() {
-    # Silenced stdout and stderr to stop stdout corruption breaking the dialog loop
     pacman -Sy --noconfirm reflector curl >/dev/null 2>&1 || return 1
 
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
@@ -235,7 +234,8 @@ EOF
 
             # openrc
             if [ "$INIT" == "init_openrc" ]; then
-                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel $DE_PKGS || INIT_OK=false
+                # Added dbus, dbus-glib, and elogind to supply essential display manager interfaces
+                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
                 arch-chroot /mnt /bin/bash <<EOF
@@ -269,13 +269,14 @@ echo "root:$ROOT" | chpasswd
 useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
 useradd -m -G wheel builduser
 echo "builduser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builduser-temp
 
 su - builduser -c '
     git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
     cd /tmp/paru-bin &&
-    makepkg -si --noconfirm
+    makepkg -si --noconfirm --needed
 ' || { echo "AUR_HELPER_FAILED"; exit 1; }
 
 su - builduser -c 'paru -S --noconfirm openrc openrc-systemdcompat networkmanager-openrc' || { echo "OPENRC_INSTALL_FAILED"; exit 1; }
@@ -289,6 +290,7 @@ grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || g
 grub-mkconfig -o /boot/grub/grub.cfg
 
 rc-update add NetworkManager default
+rc-update add dbus default
 
 if [ "$DE" == "de_kde" ]; then
     rc-update add sddm default
@@ -301,7 +303,7 @@ EOF
             
             # runit
             if [ "$INIT" == "init_runit" ]; then
-                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager $DE_PKGS || INIT_OK=false
+                pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager dbus dbus-glib elogind $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
                 arch-chroot /mnt /bin/bash <<EOF
@@ -342,7 +344,7 @@ echo "builduser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builduser-temp
 su - builduser -c '
     git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
     cd /tmp/paru-bin &&
-    makepkg -si --noconfirm
+    makepkg -si --noconfirm --needed
 ' || { echo "AUR_HELPER_FAILED"; exit 1; }
 
 su - builduser -c 'paru -S --noconfirm runit' || { echo "RUNIT_INSTALL_FAILED"; exit 1; }
