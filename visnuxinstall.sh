@@ -12,6 +12,34 @@ check_mount() {
     return 0
 }
 
+refresh_mirrors() {
+    pacman -Sy --noconfirm reflector curl || return 1
+
+    echo "Finding mirrors for your location..."
+    cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+
+    LOCATION=$(curl -s --max-time 5 https://ipinfo.io/country | tr -d '[:space:]')
+
+    REFLECTOR_OK=true
+    if [ -n "$LOCATION" ]; then
+        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist || REFLECTOR_OK=false
+    else
+        REFLECTOR_OK=false
+    fi
+
+    if [ "$REFLECTOR_OK" = false ] || [ ! -s /etc/pacman.d/mirrorlist ]; then
+        echo "Country-specific mirrors unavailable, trying global mirrors..."
+        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
+    fi
+
+    if [ ! -s /etc/pacman.d/mirrorlist ]; then
+        echo "Reflector failed, restoring default mirrorlist..."
+        cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
+    fi
+
+    pacman -Syy --noconfirm archlinux-keyring
+}
+
 while true; do
     MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 1 "User Account" 2 "Hostname" 3 "Root Password" 4 "Init Selection" 5 "DE selection" 6 "Install" 3>&1 1>&2 2>&3 3>&-)
     
@@ -78,6 +106,17 @@ while true; do
    
     if [ "$MENU" == "4" ]; then
         INIT=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 3 1 "systemd" 2 "openrc" 3 "runit" 3>&1 1>&2 2>&3 3>&-); clear
+
+        if [ -n "$INIT" ]; then
+            dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
+            if refresh_mirrors; then
+                MIRRORS_OK=true
+                dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
+            else
+                MIRRORS_OK=false
+                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use the default mirrorlist at install time." 0 0; clear
+            fi
+        fi
     fi
    
     if [ "$MENU" == "5" ]; then
@@ -129,16 +168,6 @@ while true; do
 
 #systemd
             if [ "$INIT" == "1" ]; then
-                pacman -Sy --noconfirm reflector curl || INIT_OK=false
-                echo "Finding mirrors for your location..."
-                LOCATION=$(curl -s https://ipinfo.io/country)
-                if [ -n "$LOCATION" ]; then
-                    reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                else
-                    reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                fi
-                pacman -Sy --noconfirm archlinux-keyring || INIT_OK=false
-                
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
                 
@@ -187,19 +216,11 @@ elif [ "$DE" == "2" ]; then
     systemctl enable lightdm
 fi
 EOF
+                [ $? -ne 0 ] && INIT_OK=false
             fi
 
 #openrc
             if [ "$INIT" == "2" ]; then
-                pacman -Sy --noconfirm reflector curl || INIT_OK=false
-                echo "Finding mirrors for your location..."
-                LOCATION=$(curl -s https://ipinfo.io/country)
-                if [ -n "$LOCATION" ]; then
-                    reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                else
-                    reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                fi
-                pacman -Sy --noconfirm archlinux-keyring || INIT_OK=false
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -241,9 +262,9 @@ su - builduser -c '
     git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
     cd /tmp/paru-bin &&
     makepkg -si --noconfirm
-'
+' || { echo "AUR_HELPER_FAILED"; exit 1; }
 
-su - builduser -c 'paru -S --noconfirm openrc openrc-systemdcompat networkmanager-openrc'
+su - builduser -c 'paru -S --noconfirm openrc openrc-systemdcompat networkmanager-openrc' || { echo "OPENRC_INSTALL_FAILED"; exit 1; }
 
 # Clean up the temporary build user's passwordless sudo
 rm -f /etc/sudoers.d/builduser-temp
@@ -263,21 +284,11 @@ elif [ "$DE" == "2" ]; then
     rc-update add lightdm default
 fi
 EOF
+                [ $? -ne 0 ] && INIT_OK=false
             fi
-
+            
 #runit
             if [ "$INIT" == "3" ]; then
-                pacman -Sy --noconfirm reflector curl || INIT_OK=false
-                echo "Finding mirrors for your location..."
-                LOCATION=$(curl -s https://ipinfo.io/country)
-                if [ -n "$LOCATION" ]; then
-                    reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                else
-                    reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
-                fi
-                pacman -Sy --noconfirm archlinux-keyring || INIT_OK=false
-
-                # Only real, official-repo packages. runit itself is AUR-only.
                 pacstrap -K /mnt base linux linux-firmware grub efibootmgr sudo git base-devel networkmanager $DE_PKGS || INIT_OK=false
                 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -321,8 +332,9 @@ su - builduser -c '
     git clone https://aur.archlinux.org/paru-bin.git /tmp/paru-bin &&
     cd /tmp/paru-bin &&
     makepkg -si --noconfirm
-'
-su - builduser -c 'paru -S --noconfirm runit'
+' || { echo "AUR_HELPER_FAILED"; exit 1; }
+
+su - builduser -c 'paru -S --noconfirm runit' || { echo "RUNIT_INSTALL_FAILED"; exit 1; }
 
 rm -f /etc/sudoers.d/builduser-temp
 userdel -r builduser
@@ -332,7 +344,6 @@ mkinitcpio -P
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# No packaged service script exists for NetworkManager under runit, so write one.
 mkdir -p /etc/runit/sv/NetworkManager/log
 cat <<SVEOF > /etc/runit/sv/NetworkManager/run
 #!/bin/sh
@@ -347,10 +358,13 @@ elif [ "$DE" == "2" ]; then
     ln -s /etc/runit/sv/lightdm /etc/runit/runsvdir/default/
 fi
 EOF
+                [ $? -ne 0 ] && INIT_OK=false
             fi
 
             if [ "$INIT_OK" == "false" ]; then
                 dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, idk man" 0 0; clear
+            else
+                dialog --title "All done!" --msgbox "You installed! You can reboot the system." 0 0; clear
             fi
         fi
     fi
