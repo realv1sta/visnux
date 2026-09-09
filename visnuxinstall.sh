@@ -13,31 +13,29 @@ check_mount() {
 }
 
 refresh_mirrors() {
-    pacman -Sy --noconfirm reflector curl || return 1
+    # Silenced stdout and stderr to stop stdout corruption breaking the dialog loop
+    pacman -Sy --noconfirm reflector curl >/dev/null 2>&1 || return 1
 
-    echo "Finding mirrors for your location..."
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
     LOCATION=$(curl -s --max-time 5 https://ipinfo.io/country | tr -d '[:space:]')
 
     REFLECTOR_OK=true
     if [ -n "$LOCATION" ]; then
-        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist || REFLECTOR_OK=false
+        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 || REFLECTOR_OK=false
     else
         REFLECTOR_OK=false
     fi
 
     if [ "$REFLECTOR_OK" = false ] || [ ! -s /etc/pacman.d/mirrorlist ]; then
-        echo "Country-specific mirrors unavailable, trying global mirrors..."
-        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
+        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >/dev/null 2>&1
     fi
 
     if [ ! -s /etc/pacman.d/mirrorlist ]; then
-        echo "Reflector failed, restoring default mirrorlist..."
         cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
     fi
 
-    pacman -Syy --noconfirm archlinux-keyring
+    pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
 }
 
 USER_=""
