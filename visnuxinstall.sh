@@ -37,12 +37,14 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
 }
 
+# Explicitly pre-declare ALL variables so 'set -u' never triggers an unbound variable error
 USER_=""
 PASSWORD=""
 HOST=""
 ROOT=""
 INIT=""
 DE=""
+MIRRORS_OK=false
 
 while true; do
     MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 \
@@ -123,8 +125,10 @@ while true; do
         if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
             if refresh_mirrors; then
+                MIRRORS_OK=true
                 dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
             else
+                MIRRORS_OK=false
                 dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use default mirrorlist." 0 0; clear
             fi
         fi
@@ -140,6 +144,7 @@ while true; do
 
         MISSING=""
         [ -z "${USER_:-}" ] && MISSING="${MISSING}\n - User Account"
+        [ -z "${PASSWORD:-}" ] && MISSING="${MISSING}\n - User Password"
         [ -z "${HOST:-}" ] && MISSING="${MISSING}\n - Hostname"
         [ -z "${ROOT:-}" ] && MISSING="${MISSING}\n - Root Password"
         [ -z "${INIT:-}" ] && MISSING="${MISSING}\n - Init Selection"
