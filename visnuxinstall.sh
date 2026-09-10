@@ -31,7 +31,7 @@ refresh_mirrors() {
         [ -f /etc/pacman.d/mirrorlist.backup ] && cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
     fi
 
-    pacman -Syy --noconfirm archlinux-keyring
+    pacman -Syy --noconfirm archlinux-keyring artix-keyring || true
 }
 
 # Display welcome message before main menu loop
@@ -153,7 +153,10 @@ while true; do
             # ================= SYSTEMD INSTALL =================
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
-                pacman -Sy archlinux-keyring --noconfirm
+                
+                pacman-key --init || true
+                pacman-key --populate archlinux || true
+                pacman -Sy archlinux-keyring --noconfirm || true
 
                 pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr sudo || INIT_OK=false
                 genfstab -U /mnt > /mnt/etc/fstab
@@ -226,11 +229,11 @@ SigLevel = Never
 Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 EOF
 
-                pacman-key --init
-                pacman-key --populate artix
+                pacman-key --init || true
+                pacman-key --populate artix archlinux || true
 
-                pacman -Sy --config "$ARTIX_BOOTSTRAP_CONF" --noconfirm artix-keyring
-                pacman-key --populate artix
+                pacman -Sy --config "$ARTIX_BOOTSTRAP_CONF" --noconfirm artix-keyring archlinux-keyring || true
+                pacman-key --populate artix archlinux || true
 
                 ARTIX_CONF="/tmp/visnux-artix.conf"
                 cat > "$ARTIX_CONF" <<EOF
@@ -253,7 +256,7 @@ Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring artix-mirrorlist sudo git || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git || INIT_OK=false
 
                 echo 'Server = https://mirrors.rit.edu/artixlinux/$repo/os/$arch' > /mnt/etc/pacman.d/mirrorlist
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
@@ -261,9 +264,10 @@ EOF
 
                 genfstab -U /mnt > /mnt/etc/fstab
 
-                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+                arch-chroot /mnt pacman-key --init || true
+                arch-chroot /mnt pacman-key --populate artix archlinux || true
+                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist artix-keyring archlinux-keyring || true
                 arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support || true
-                arch-chroot /mnt pacman-key --populate archlinux || true
 
                 DE_PKGS=""
                 DESKTOP_PKGS=""
@@ -347,11 +351,11 @@ SigLevel = Never
 Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 EOF
 
-                pacman-key --init
-                pacman-key --populate artix
+                pacman-key --init || true
+                pacman-key --populate artix archlinux || true
 
-                pacman -Sy --config "$ARTIX_BOOTSTRAP_CONF" --noconfirm artix-keyring
-                pacman-key --populate artix
+                pacman -Sy --config "$ARTIX_BOOTSTRAP_CONF" --noconfirm artix-keyring archlinux-keyring || true
+                pacman-key --populate artix archlinux || true
 
                 ARTIX_CONF="/tmp/visnux-artix.conf"
                 cat > "$ARTIX_CONF" <<EOF
@@ -374,7 +378,7 @@ Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 Server = https://artix.dingo.kiwi/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring artix-mirrorlist sudo git || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git || INIT_OK=false
 
                 echo 'Server = https://mirrors.rit.edu/artixlinux/$repo/os/$arch' > /mnt/etc/pacman.d/mirrorlist
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
@@ -382,9 +386,10 @@ EOF
 
                 genfstab -U /mnt > /mnt/etc/fstab
 
-                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+                arch-chroot /mnt pacman-key --init || true
+                arch-chroot /mnt pacman-key --populate artix archlinux || true
+                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist artix-keyring archlinux-keyring || true
                 arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support || true
-                arch-chroot /mnt pacman-key --populate archlinux || true
 
                 DE_PKGS=""
                 DESKTOP_PKGS=""
