@@ -28,6 +28,15 @@ fix_keyrings_and_time() {
     pacman-key --populate artix archlinux >> "$LOGFILE" 2>&1 || true
 }
 
+setup_chroot_dns() {
+    # Remove existing file/symlink and inject working static DNS
+    rm -f /mnt/etc/resolv.conf
+    cat <<EOF > /mnt/etc/resolv.conf
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+}
+
 refresh_mirrors() {
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup || true
     LOCATION=$(curl -s --max-time 5 https://ipinfo.io/country | tr -d '[:space:]')
@@ -175,9 +184,7 @@ while true; do
                 
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt > /mnt/etc/fstab
-
-                    # Copy network DNS settings into the target system
-                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
+                    setup_chroot_dns
 
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
@@ -269,9 +276,7 @@ EOF
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
-
-                    # Copy network DNS settings into the target system
-                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
+                    setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman-key --init
@@ -380,9 +385,7 @@ EOF
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
-
-                    # Copy network DNS settings into the target system
-                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
+                    setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman-key --init
