@@ -20,16 +20,13 @@ show_error_log() {
 fix_keyrings_and_time() {
     echo "=== Synchronizing System Time & Fixing Keyrings ===" >> "$LOGFILE"
     
-    # Force time sync to avoid expired PGP signature errors
     timedatectl set-ntp true 2>/dev/null || true
     
-    # Reset and populate host keyrings
     pacman-key --init >> "$LOGFILE" 2>&1 || true
     pacman-key --populate artix archlinux >> "$LOGFILE" 2>&1 || true
 }
 
 setup_chroot_dns() {
-    # Remove existing file/symlink and inject working static DNS
     rm -f /mnt/etc/resolv.conf
     cat <<EOF > /mnt/etc/resolv.conf
 nameserver 1.1.1.1
@@ -59,10 +56,8 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring artix-keyring >> "$LOGFILE" 2>&1 || true
 }
 
-# Clear old log file
 > "$LOGFILE"
 
-# Display welcome message before main menu loop
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
 while true; do
@@ -388,6 +383,13 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+# Ensure static fallback DNS is locked inside chroot for pacman
+rm -f /etc/resolv.conf
+cat <<RESOLVEOF > /etc/resolv.conf
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+RESOLVEOF
+
 pacman-key --init
 pacman-key --populate artix archlinux
 pacman -Sy --noconfirm artix-mirrorlist artix-keyring archlinux-keyring artix-archlinux-support || true
@@ -450,13 +452,15 @@ pacman -S \
     nano sudo \
     --noconfirm
 
-# Correct path for persistent runit service enabling
+# Set up active runit services directory
+mkdir -p /run/runit/runsvdir/current
 mkdir -p /etc/runit/runsvdir/default
 
-# Correct case-sensitivity for service folder names
-for svc in dbus elogind NetworkManager turnstiled sddm power-profiles-daemon; do
+# Link required services for Runit (handles case variations in Artix runit packages)
+for svc in dbus elogind networkmanager NetworkManager turnstiled sddm power-profiles-daemon; do
     if [ -d "/etc/runit/sv/\$svc" ]; then
         ln -sf "/etc/runit/sv/\$svc" /etc/runit/runsvdir/default/
+        ln -sf "/etc/runit/sv/\$svc" /run/runit/runsvdir/current/ 2>/dev/null || true
     fi
 done
 EOF
