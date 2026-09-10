@@ -6,7 +6,6 @@ dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running 
 
 check_mount() {
     if ! mountpoint -q /mnt; then
-        dialog --title "BRO" --msgbox "Mount your drivers BETTER noob. I see no /mnt >:(" 0 0; clear
         return 1
     fi
     return 0
@@ -55,7 +54,6 @@ while true; do
         while true; do
             USER_=$(dialog --title "User Creation" --inputbox "Please write a name for your user: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
             if [ -z "$USER_" ]; then
-                dialog --title "Uh oh.." --msgbox "You can't leave the username blank, try again" 0 0; clear
                 continue
             fi
             break
@@ -65,13 +63,9 @@ while true; do
             PASSWORD=$(dialog --title "Password" --insecure --passwordbox "Please make a password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
             PASSWORD2=$(dialog --title "Password" --insecure --passwordbox "Please retype the password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
             
-            if [ -z "$PASSWORD" ]; then
-                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
-            elif [ "$PASSWORD" == "$PASSWORD2" ]; then
+            if [ -n "$PASSWORD" ] && [ "$PASSWORD" == "$PASSWORD2" ]; then
                 dialog --title "Password Set!" --msgbox "Password has been set!" 0 0; clear
                 break
-            else
-                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
             fi
         done
     fi
@@ -80,7 +74,6 @@ while true; do
         while true; do
             HOST=$(dialog --title "Hostname" --inputbox "Create your hostname: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
             if [ -z "$HOST" ]; then
-                dialog --title "Uh oh.." --msgbox "You can't leave the hostname blank, try again" 0 0; clear
                 continue
             fi
             break
@@ -93,13 +86,9 @@ while true; do
             ROOT=$(dialog --title "Root password" --insecure --passwordbox "Please type in your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
             ROOT2=$(dialog --title "Root password" --insecure --passwordbox "Please retype your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
         
-            if [ -z "$ROOT" ]; then
-                dialog --title "Whoopsies..?" --msgbox "Yeah buddy you messed up your root password, re-do it bud" 0 0; clear
-            elif [ "$ROOT" == "$ROOT2" ]; then
+            if [ -n "$ROOT" ] && [ "$ROOT" == "$ROOT2" ]; then
                 dialog --title "Root Password Set!" --msgbox "Your root password has been set!" 0 0; clear
                 break
-            else
-                dialog --title "Whoopsies..?" --msgbox "Yeah buddy you messed up your root password, re-do it bud" 0 0; clear
             fi
         done
     fi
@@ -114,7 +103,7 @@ while true; do
                 dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
             else
                 MIRRORS_OK=false
-                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use the default mirrorlist at install time." 0 0; clear
+                clear
             fi
         fi
     fi
@@ -133,7 +122,6 @@ while true; do
         [ -z "${DE:-}" ] && MISSING="${MISSING}\n - DE selection"
 
         if [ -n "$MISSING" ]; then
-            dialog --title "Hold up!" --msgbox "You still need to finish these before installing:$MISSING" 0 0; clear
             continue
         fi
 
@@ -363,9 +351,7 @@ EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
-            if [ "$INIT_OK" == "false" ]; then
-                dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, idk man" 0 0; clear
-            else
+            if [ "$INIT_OK" == "true" ]; then
                 dialog --title "All done!" --msgbox "You installed! You can reboot the system." 0 0; clear
             fi
         fi
