@@ -383,12 +383,13 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
-# Ensure static fallback DNS is locked inside chroot for pacman
+# Remove old resolv.conf and set immutable DNS
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 RESOLVEOF
+chattr +i /etc/resolv.conf || true
 
 pacman-key --init
 pacman-key --populate artix archlinux
@@ -452,15 +453,12 @@ pacman -S \
     nano sudo \
     --noconfirm
 
-# Set up active runit services directory
-mkdir -p /run/runit/runsvdir/current
+# Enable Runit services using lowercase names matched to Artix packages
 mkdir -p /etc/runit/runsvdir/default
 
-# Link required services for Runit (handles case variations in Artix runit packages)
-for svc in dbus elogind networkmanager NetworkManager turnstiled sddm power-profiles-daemon; do
+for svc in dbus elogind networkmanager turnstiled sddm power-profiles-daemon; do
     if [ -d "/etc/runit/sv/\$svc" ]; then
         ln -sf "/etc/runit/sv/\$svc" /etc/runit/runsvdir/default/
-        ln -sf "/etc/runit/sv/\$svc" /run/runit/runsvdir/current/ 2>/dev/null || true
     fi
 done
 EOF
