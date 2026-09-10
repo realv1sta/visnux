@@ -4,10 +4,9 @@ set -u
 set -o pipefail
 
 LOG_FILE="/tmp/visnux_install.log"
-# Clear previous log on run
 > "$LOG_FILE"
 
-# Clean up dialog screens properly on exit or cancellation
+# Reset terminal graphics on exit
 cleanup() {
     clear
 }
@@ -51,26 +50,33 @@ refresh_mirrors() {
 write_artix_pacman_conf() {
     cat <<'ARTIXPAC' > /etc/pacman.artix.conf
 [options]
-HoldPkg     = pacman glibc
+HoldPkg      = pacman glibc
 Architecture = auto
 LocalFileSigLevel = Optional
 SigLevel = Never
 
 [system]
-Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.mirror.garr.it/artixlinux/$repo/os/$arch
+Server = https://mirrors.netix.net/artixlinux/$repo/os/$arch
 
 [world]
-Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.mirror.garr.it/artixlinux/$repo/os/$arch
+Server = https://mirrors.netix.net/artixlinux/$repo/os/$arch
 
 [galaxy]
-Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.mirror.garr.it/artixlinux/$repo/os/$arch
+Server = https://mirrors.netix.net/artixlinux/$repo/os/$arch
 
 [universe]
-Server = https://universe.artixlinux.org/$arch
-Server = https://mirror.artixlinux.org/universe/$arch
+Server = https://artix.ding.im/universe/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/universe/$arch
+Server = https://artix.mirror.garr.it/artixlinux/universe/$arch
 
 [extra]
 Include = /etc/pacman.d/mirrorlist
@@ -210,7 +216,6 @@ while true; do
                 TIMEZONE="UTC"
             fi
 
-            # Determine the parent installation target disk on host prior to chrooting
             MNT_DEV=$(findmnt -n -o SOURCE /mnt)
             TARGET_DISK=$(lsblk -no PKNAME "$MNT_DEV" | head -n1)
             [ -z "$TARGET_DISK" ] && TARGET_DISK="sda"
@@ -306,7 +311,7 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-openrc udev-openrc dbus-openrc linux linux-firmware openrc elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-openrc udev-openrc dbus-openrc artix-keyring linux linux-firmware openrc elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
@@ -383,7 +388,7 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-runit udev-runit dbus-runit linux linux-firmware runit elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-runit udev-runit dbus-runit artix-keyring linux linux-firmware runit elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
