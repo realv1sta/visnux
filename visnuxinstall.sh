@@ -19,9 +19,7 @@ show_error_log() {
 
 fix_keyrings_and_time() {
     echo "=== Synchronizing System Time & Fixing Keyrings ===" >> "$LOGFILE"
-    
     timedatectl set-ntp true 2>/dev/null || true
-    
     pacman-key --init >> "$LOGFILE" 2>&1 || true
     pacman-key --populate artix archlinux >> "$LOGFILE" 2>&1 || true
 }
@@ -187,6 +185,10 @@ while true; do
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman -Sy --noconfirm archlinux-keyring || true
 
+# Set DNS & Lock
+echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
+chattr +i /etc/resolv.conf || true
+
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
@@ -227,13 +229,12 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 if [ "$DE" == "1" ]; then
     pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --noconfirm
-    systemctl enable NetworkManager
-    systemctl enable sddm --force
 elif [ "$DE" == "2" ]; then
-    pacman -S xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --noconfirm
-    systemctl enable NetworkManager
-    systemctl enable sddm --force
+    pacman -S xorg-server xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --noconfirm
 fi
+
+systemctl enable NetworkManager
+systemctl enable sddm --force
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
                 fi
@@ -274,6 +275,9 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
+chattr +i /etc/resolv.conf || true
+
 pacman-key --init
 pacman-key --populate artix archlinux
 pacman -Sy --noconfirm artix-mirrorlist artix-keyring archlinux-keyring artix-archlinux-support || true
@@ -383,7 +387,7 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
-# Remove old resolv.conf and set immutable DNS
+# Set hardcoded DNS and lock file
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
@@ -453,7 +457,7 @@ pacman -S \
     nano sudo \
     --noconfirm
 
-# Enable Runit services using lowercase names matched to Artix packages
+# Enable services in Runit (ensures graphical target via SDDM)
 mkdir -p /etc/runit/runsvdir/default
 
 for svc in dbus elogind networkmanager turnstiled sddm power-profiles-daemon; do
@@ -468,7 +472,7 @@ EOF
             fi
 
             if [ "$INIT_OK" == "true" ]; then
-                dialog --title "All done!" --msgbox "Installation complete! You can unmount /mnt and reboot into Visnux Linux." 0 0; clear
+                dialog --title "All done!" --msgbox "Installation complete! Reboot into Visnux Linux to launch SDDM." 0 0; clear
                 break
             else
                 show_error_log
