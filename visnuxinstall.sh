@@ -176,10 +176,15 @@ while true; do
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt > /mnt/etc/fstab
 
+                    # Copy network DNS settings into the target system
+                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
+
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+pacman -Sy --noconfirm archlinux-keyring || true
+
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
@@ -264,6 +269,9 @@ EOF
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
+
+                    # Copy network DNS settings into the target system
+                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman-key --init
@@ -372,6 +380,9 @@ EOF
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
+
+                    # Copy network DNS settings into the target system
+                    cp -L /etc/resolv.conf /mnt/etc/resolv.conf 2>/dev/null || true
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman-key --init
