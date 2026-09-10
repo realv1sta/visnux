@@ -4,9 +4,14 @@ set -u
 set -o pipefail
 
 LOG_FILE="/tmp/visnux_install.log"
-exec 3>&1 4>&2
-# Stream stdout and stderr to both logfile and terminal for clean debugging
-exec 1> >(tee -a "$LOG_FILE") 2>&1
+# Clear previous log on run
+> "$LOG_FILE"
+
+# Clean up dialog screens properly on exit or cancellation
+cleanup() {
+    clear
+}
+trap cleanup EXIT
 
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
@@ -19,7 +24,7 @@ check_mount() {
 }
 
 refresh_mirrors() {
-    pacman -Sy --noconfirm reflector curl >/dev/null 2>&1 || return 1
+    pacman -Sy --noconfirm reflector curl >> "$LOG_FILE" 2>&1 || return 1
 
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
@@ -27,20 +32,20 @@ refresh_mirrors() {
 
     REFLECTOR_OK=true
     if [ -n "$LOCATION" ]; then
-        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >/dev/null 2>&1 || REFLECTOR_OK=false
+        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || REFLECTOR_OK=false
     else
         REFLECTOR_OK=false
     fi
 
     if [ "$REFLECTOR_OK" = false ] || [ ! -s /etc/pacman.d/mirrorlist ]; then
-        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >/dev/null 2>&1
+        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1
     fi
 
     if [ ! -s /etc/pacman.d/mirrorlist ]; then
         cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
     fi
 
-    pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
+    pacman -Syy --noconfirm archlinux-keyring >> "$LOG_FILE" 2>&1
 }
 
 write_artix_pacman_conf() {
@@ -205,25 +210,18 @@ while true; do
                 TIMEZONE="UTC"
             fi
 
+            # Determine the parent installation target disk on host prior to chrooting
+            MNT_DEV=$(findmnt -n -o SOURCE /mnt)
+            TARGET_DISK=$(lsblk -no PKNAME "$MNT_DEV" | head -n1)
+            [ -z "$TARGET_DISK" ] && TARGET_DISK="sda"
+
             INIT_OK=true
 
             if [ "$INIT" == "init_openrc" ] || [ "$INIT" == "init_runit" ]; then
                 write_artix_pacman_conf
             fi
 
-            # Dynamic bootloader helper logic
-            install_bootloader() {
-                if [ -d /sys/firmware/efi/efivars ]; then
-                    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
-                else
-                    PARENT_DISK=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /mnt)")
-                    if [ -z "$PARENT_DISK" ]; then
-                        PARENT_DISK="sda"
-                    fi
-                    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
-                fi
-                grub-mkconfig -o /boot/grub/grub.cfg
-            }
+            dialog --title "Installing..." --infobox "Installation in progress. Logs are written to $LOG_FILE..." 0 0
 
             # --------------------------
             # SYSTEMD INSTALLATION
@@ -237,12 +235,12 @@ while true; do
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt >> /mnt/etc/fstab
                     cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
-                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" TARGET_DISK="$TARGET_DISK" /bin/bash <<'EOF' >> "$LOG_FILE" 2>&1
 set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
@@ -280,10 +278,7 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 if [ -d /sys/firmware/efi/efivars ]; then
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
 else
-    SRC_DEV=$(findmnt -n -o SOURCE /)
-    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
-    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
-    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+    grub-install --target=i386-pc "/dev/$TARGET_DISK" --recheck
 fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -311,14 +306,14 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-openrc udev-openrc linux linux-firmware openrc elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-openrc udev-openrc dbus-openrc linux linux-firmware openrc elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
                     cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
-                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" TARGET_DISK="$TARGET_DISK" /bin/bash <<'EOF' >> "$LOG_FILE" 2>&1
 set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
@@ -356,16 +351,15 @@ mkinitcpio -P
 if [ -d /sys/firmware/efi/efivars ]; then
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
 else
-    SRC_DEV=$(findmnt -n -o SOURCE /)
-    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
-    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
-    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+    grub-install --target=i386-pc "/dev/$TARGET_DISK" --recheck
 fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
+rc-update add sysfs sysinit
+rc-update add udev sysinit
+rc-update add dbus default
 rc-update add NetworkManager default
 rc-update add elogind default
-rc-update add udev sysinit
 
 if [ "$DE" == "de_kde" ]; then
     rc-update add sddm default
@@ -389,14 +383,14 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-runit udev-runit linux linux-firmware runit elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-runit udev-runit dbus-runit linux linux-firmware runit elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS >> "$LOG_FILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
                     cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
-                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+                    arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" TARGET_DISK="$TARGET_DISK" /bin/bash <<'EOF' >> "$LOG_FILE" 2>&1
 set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
@@ -434,16 +428,14 @@ mkinitcpio -P
 if [ -d /sys/firmware/efi/efivars ]; then
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
 else
-    SRC_DEV=$(findmnt -n -o SOURCE /)
-    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
-    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
-    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+    grub-install --target=i386-pc "/dev/$TARGET_DISK" --recheck
 fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
+ln -sf /etc/runit/sv/udevd /etc/runit/runsvdir/default/
+ln -sf /etc/runit/sv/dbus /etc/runit/runsvdir/default/
 ln -sf /etc/runit/sv/NetworkManager /etc/runit/runsvdir/default/
 ln -sf /etc/runit/sv/elogind /etc/runit/runsvdir/default/
-ln -sf /etc/runit/sv/udevd /etc/runit/runsvdir/default/
 
 if [ "$DE" == "de_kde" ]; then
     ln -sf /etc/runit/sv/sddm /etc/runit/runsvdir/default/
@@ -455,6 +447,7 @@ EOF
                 fi
             fi
 
+            clear
             if [ "$INIT_OK" == "false" ]; then
                 dialog --title "Uh oh.." --msgbox "Installation failed. Check /tmp/visnux_install.log for complete logs." 0 0; clear
             else
