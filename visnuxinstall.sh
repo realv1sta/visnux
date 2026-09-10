@@ -3,11 +3,16 @@
 set -u
 set -o pipefail
 
+LOG_FILE="/tmp/visnux_install.log"
+exec 3>&1 4>&2
+# Stream stdout and stderr to both logfile and terminal for clean debugging
+exec 1> >(tee -a "$LOG_FILE") 2>&1
+
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
 check_mount() {
     if ! mountpoint -q /mnt; then
-        dialog --title "BRO" --msgbox "Mount your drivers BETTER noob. I see no /mnt >:(" 0 0; clear
+        dialog --title "BRO" --msgbox "Mount your drives BETTER noob. I see no /mnt >:(" 0 0; clear
         return 1
     fi
     return 0
@@ -38,13 +43,6 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
 }
 
-# Write a self-contained pacman config for the Artix repos, with the mirror
-# URLs baked in directly (no Include -> separate mirrorlist-artix file, and
-# no indirection through an /mnt/... path that breaks the moment you chroot).
-# SigLevel is relaxed for these repos since we're pulling Artix packages onto
-# an Arch base without the Artix keyring pre-trusted. If you want proper
-# signature verification instead, import artix-keyring and switch this back
-# to "Required DatabaseOptional".
 write_artix_pacman_conf() {
     cat <<'ARTIXPAC' > /etc/pacman.artix.conf
 [options]
@@ -54,32 +52,26 @@ LocalFileSigLevel = Optional
 SigLevel = Never
 
 [system]
-Server = https://mirror1.artixlinux.org/$repo/os/$arch
-Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
 
 [world]
-Server = https://mirror1.artixlinux.org/$repo/os/$arch
-Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
 
 [galaxy]
-Server = https://mirror1.artixlinux.org/$repo/os/$arch
-Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://mirror.artixlinux.org/$repo/os/$arch
 Server = https://artix.ding.im/$repo/os/$arch
 
 [universe]
 Server = https://universe.artixlinux.org/$arch
-Server = https://mirror1.artixlinux.org/universe/$arch
-Server = https://mirror.pascalpuffke.de/artix-universe/$arch
-Server = https://artixlinux.qontinuum.space/artixlinux/universe/os/$arch
+Server = https://mirror.artixlinux.org/universe/$arch
 
 [extra]
 Include = /etc/pacman.d/mirrorlist
 ARTIXPAC
 }
 
-# Pre-declare variables to prevent unbound variable crashes under set -u
 USER_=""
 PASSWORD=""
 HOST=""
@@ -215,10 +207,23 @@ while true; do
 
             INIT_OK=true
 
-            # Artix repos are only needed for OpenRC / Runit installs.
             if [ "$INIT" == "init_openrc" ] || [ "$INIT" == "init_runit" ]; then
                 write_artix_pacman_conf
             fi
+
+            # Dynamic bootloader helper logic
+            install_bootloader() {
+                if [ -d /sys/firmware/efi/efivars ]; then
+                    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
+                else
+                    PARENT_DISK=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /mnt)")
+                    if [ -z "$PARENT_DISK" ]; then
+                        PARENT_DISK="sda"
+                    fi
+                    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+                fi
+                grub-mkconfig -o /boot/grub/grub.cfg
+            }
 
             # --------------------------
             # SYSTEMD INSTALLATION
@@ -235,7 +240,6 @@ while true; do
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt >> /mnt/etc/fstab
-                    # Carry the fast mirrorlist we found on the host into the new install.
                     cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
@@ -273,7 +277,14 @@ useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
+else
+    SRC_DEV=$(findmnt -n -o SOURCE /)
+    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
+    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
+    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 systemctl enable NetworkManager
@@ -289,7 +300,7 @@ EOF
             fi
 
             # --------------------------
-            # OPENRC INSTALLATION (ARTIX REPOS)
+            # OPENRC INSTALLATION
             # --------------------------
             if [ "$INIT" == "init_openrc" ]; then
                 DE_PKGS=""
@@ -300,7 +311,7 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware openrc openrc-systemdcompat elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-openrc udev-openrc linux linux-firmware openrc elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
@@ -342,11 +353,19 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
+else
+    SRC_DEV=$(findmnt -n -o SOURCE /)
+    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
+    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
+    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 rc-update add NetworkManager default
 rc-update add elogind default
+rc-update add udev sysinit
 
 if [ "$DE" == "de_kde" ]; then
     rc-update add sddm default
@@ -359,7 +378,7 @@ EOF
             fi
 
             # --------------------------
-            # RUNIT INSTALLATION (ARTIX REPOS)
+            # RUNIT INSTALLATION
             # --------------------------
             if [ "$INIT" == "init_runit" ]; then
                 DE_PKGS=""
@@ -370,7 +389,7 @@ EOF
                 fi
 
                 # shellcheck disable=SC2086
-                pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware runit runit-systemdcompat elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -C /etc/pacman.artix.conf -K /mnt base base-runit udev-runit linux linux-firmware runit elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
@@ -412,11 +431,19 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
+else
+    SRC_DEV=$(findmnt -n -o SOURCE /)
+    PARENT_DISK=$(lsblk -no PKNAME "$SRC_DEV" | head -n1)
+    [ -z "$PARENT_DISK" ] && PARENT_DISK="sda"
+    grub-install --target=i386-pc "/dev/$PARENT_DISK" --recheck
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 ln -sf /etc/runit/sv/NetworkManager /etc/runit/runsvdir/default/
 ln -sf /etc/runit/sv/elogind /etc/runit/runsvdir/default/
+ln -sf /etc/runit/sv/udevd /etc/runit/runsvdir/default/
 
 if [ "$DE" == "de_kde" ]; then
     ln -sf /etc/runit/sv/sddm /etc/runit/runsvdir/default/
@@ -429,9 +456,9 @@ EOF
             fi
 
             if [ "$INIT_OK" == "false" ]; then
-                dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, check internet connectivity or disk mounts." 0 0; clear
+                dialog --title "Uh oh.." --msgbox "Installation failed. Check /tmp/visnux_install.log for complete logs." 0 0; clear
             else
-                dialog --title "All done!" --msgbox "You installed! You can reboot the system." 0 0; clear
+                dialog --title "All done!" --msgbox "Visnux installed successfully! You can now reboot." 0 0; clear
             fi
         fi
     fi
