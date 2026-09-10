@@ -392,26 +392,11 @@ fi
 sed -i 's/GRUB_DISTRIBUTOR="Arch"/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub
 sed -i 's/GRUB_DISTRIBUTOR="Artix"/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub
 
-git clone https://github.com/realv1sta/larphub
-cp -r larphub/neveraskmewhatthisis/Office-sidebar /boot/grub/themes
-cp larphub/visnux.svg /usr/share/icons/hicolor/scalable/apps/visnux.svg
-cp larphub/visnux.png /usr/share/pixmaps/visnux.png
-mkdir -p ~/.config/fastfetch
-chmod +x larphub/colorlogo.sh && cd larphub/ && ./colorlogo.sh > ~/.config/fastfetch/logo.txt
-cp neveraskmewhatthisis/config.jsonc ~/.config/fastfetch/
-mkdir -p /etc/skel/.config
-cp -r neveraskmewhatthisis/xfce4 /etc/skel/.config/
-cp -r neveraskmewhatthisis/fish /etc/skel/.config/
-cp neveraskmewhatthisis/plasma-org.kde.plasma.desktop-appletsrc /etc/skel/.config/
 git clone https://github.com/beamyyl/fastfetch
+mkdir -p /etc/skel/.config
 cp -r fastfetch/* /etc/skel/.config/
-./colorlogo.sh > /etc/skel/.config/fastfetch/logo.txt
-mkdir -p /usr/share/wallpapers/
-cp -r walls/visnux-walls/* /usr/share/wallpapers/
-cd ..
-rm -rf larphub
+rm -rf fastfetch
 
-echo 'GRUB_THEME=/boot/grub/themes/Office-sidebar/theme.txt' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 echo ""
