@@ -146,18 +146,19 @@ while true; do
 
             INIT_OK=true
 
-# systemd
+# =============================================================================
+# SYSTEMD INSTALLATION
+# =============================================================================
             if [ "$INIT" == "1" ]; then
-                DE_PKGS=""
-                if [ "$DE" == "1" ]; then
-                    DE_PKGS="plasma-desktop sddm konsole dolphin"
-                elif [ "$DE" == "2" ]; then
-                    DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
-                fi
+                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
+                pacman -Sy archlinux-keyring --noconfirm
 
-                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr sudo || INIT_OK=false
                 genfstab -U /mnt > /mnt/etc/fstab
-                
+
+                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
+                sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
+
                 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
@@ -195,33 +196,69 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-systemctl enable NetworkManager
-
 if [ "$DE" == "1" ]; then
-    systemctl enable sddm
+    pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
+    systemctl enable NetworkManager
+    systemctl enable sddm --force
 elif [ "$DE" == "2" ]; then
-    systemctl enable lightdm
+    pacman -S xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
+    systemctl enable NetworkManager
+    systemctl enable sddm --force
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
-# openrc
+# =============================================================================
+# OPENRC INSTALLATION
+# =============================================================================
             if [ "$INIT" == "2" ]; then
-                DE_PKGS=""
-                DESKTOP_PKGS=""
-                if [ "$DE" == "1" ]; then
-                    DE_PKGS="plasma-desktop konsole dolphin"
-                    DESKTOP_PKGS="sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
-                elif [ "$DE" == "2" ]; then
-                    DE_PKGS="xfce4 xfce4-goodies"
-                    DESKTOP_PKGS="lightdm lightdm-openrc lightdm-gtk-greeter power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
-                fi
+                ARTIX_BOOTSTRAP_CONF="/tmp/visnux-artix-bootstrap.conf"
+                cat > "$ARTIX_BOOTSTRAP_CONF" <<EOF
+[options]
+Architecture = auto
+Color
+CheckSpace
+ParallelDownloads = 12
+SigLevel = Never
 
-                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist grub efibootmgr sudo git \
-                    openrc elogind-openrc networkmanager networkmanager-openrc dbus dbus-openrc turnstile turnstile-openrc $DE_PKGS $DESKTOP_PKGS || INIT_OK=false
+[system]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+EOF
+
+                pacman --config "$ARTIX_BOOTSTRAP_CONF" -Sy --noconfirm artix-keyring
+                pacman-key --init
+                pacman-key --populate artix
+
+                ARTIX_CONF="/tmp/visnux-artix.conf"
+                cat > "$ARTIX_CONF" <<EOF
+[options]
+Architecture = auto
+Color
+CheckSpace
+ParallelDownloads = 12
+SigLevel = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[system]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+[world]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+[galaxy]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+EOF
+
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist openrc elogind-openrc grub efibootmgr sudo git || INIT_OK=false
+
+                echo 'Server = https://mirrors.rit.edu/artixlinux/$repo/os/$arch' > /mnt/etc/pacman.d/mirrorlist
+                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
+                sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                 genfstab -U /mnt > /mnt/etc/fstab
+
+                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+                arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
+                arch-chroot /mnt pacman-key --populate archlinux
 
                 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
@@ -255,44 +292,93 @@ useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
-arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
-arch-chroot /mnt pacman-key --populate archlinux
-
 mkinitcpio -P
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
+
+DE_PKGS=""
+DESKTOP_PKGS=""
+
+if [ "$DE" == "1" ]; then
+    DE_PKGS="plasma konsole dolphin"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+elif [ "$DE" == "2" ]; then
+    DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+fi
+
+pacman -S \
+    \$DE_PKGS \
+    \$DESKTOP_PKGS \
+    turnstile turnstile-openrc \
+    networkmanager networkmanager-openrc \
+    dbus dbus-openrc \
+    neovim nano sudo \
+    --noconfirm
 
 rc-update add dbus default
 rc-update add elogind default
 rc-update add NetworkManager default
 rc-update add turnstile default
-if [ "$DE" == "1" ]; then
+if [ "$DE" != "none" ]; then
     rc-update add sddm default
-elif [ "$DE" == "2" ]; then
-    rc-update add lightdm default
+    rc-update add power-profiles-daemon default
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
-# runit
+# =============================================================================
+# RUNIT INSTALLATION
+# =============================================================================
             if [ "$INIT" == "3" ]; then
-                DE_PKGS=""
-                DESKTOP_PKGS=""
-                if [ "$DE" == "1" ]; then
-                    DE_PKGS="plasma-desktop konsole dolphin"
-                    DESKTOP_PKGS="sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
-                elif [ "$DE" == "2" ]; then
-                    DE_PKGS="xfce4 xfce4-goodies"
-                    DESKTOP_PKGS="lightdm lightdm-runit lightdm-gtk-greeter power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
-                fi
+                ARTIX_BOOTSTRAP_CONF="/tmp/visnux-artix-bootstrap.conf"
+                cat > "$ARTIX_BOOTSTRAP_CONF" <<EOF
+[options]
+Architecture = auto
+Color
+CheckSpace
+ParallelDownloads = 12
+SigLevel = Never
 
-                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist grub efibootmgr sudo git \
-                    runit runit-rc elogind-runit networkmanager networkmanager-runit dbus dbus-runit turnstile turnstile-runit $DE_PKGS $DESKTOP_PKGS || INIT_OK=false
+[system]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+EOF
+
+                pacman --config "$ARTIX_BOOTSTRAP_CONF" -Sy --noconfirm artix-keyring
+                pacman-key --init
+                pacman-key --populate artix
+
+                ARTIX_CONF="/tmp/visnux-artix.conf"
+                cat > "$ARTIX_CONF" <<EOF
+[options]
+Architecture = auto
+Color
+CheckSpace
+ParallelDownloads = 12
+SigLevel = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[system]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+[world]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+[galaxy]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+EOF
+
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist runit runit-rc elogind-runit grub efibootmgr sudo git || INIT_OK=false
+
+                echo 'Server = https://mirrors.rit.edu/artixlinux/$repo/os/$arch' > /mnt/etc/pacman.d/mirrorlist
+                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
+                sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
                 genfstab -U /mnt > /mnt/etc/fstab
+
+                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+                arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
+                arch-chroot /mnt pacman-key --populate archlinux
 
                 arch-chroot /mnt /bin/bash <<EOF
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
@@ -326,14 +412,30 @@ useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
-arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
-arch-chroot /mnt pacman-key --populate archlinux
-
 mkinitcpio -P
 
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
+
+DE_PKGS=""
+DESKTOP_PKGS=""
+
+if [ "$DE" == "1" ]; then
+    DE_PKGS="plasma konsole dolphin"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+elif [ "$DE" == "2" ]; then
+    DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+fi
+
+pacman -S \
+    \$DE_PKGS \
+    \$DESKTOP_PKGS \
+    turnstile turnstile-runit \
+    networkmanager networkmanager-runit \
+    dbus dbus-runit \
+    neovim nano sudo \
+    --noconfirm
 
 mkdir -p /etc/runit/runsvdir/default
 for service in dbus elogind NetworkManager turnstiled; do
@@ -342,10 +444,9 @@ for service in dbus elogind NetworkManager turnstiled; do
     fi
 done
 
-if [ "$DE" == "1" ] && [ -d "/etc/runit/sv/sddm" ]; then
+if [ "$DE" != "none" ] && [ -d "/etc/runit/sv/sddm" ] && [ ! -e "/etc/runit/runsvdir/default/sddm" ]; then
     ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/sddm
-elif [ "$DE" == "2" ] && [ -d "/etc/runit/sv/lightdm" ]; then
-    ln -s /etc/runit/sv/lightdm /etc/runit/runsvdir/default/lightdm
+    ln -s /etc/runit/sv/power-profiles-daemon /etc/runit/runsvdir/default/power-profiles-daemon
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
