@@ -1,135 +1,136 @@
 #!/bin/bash
 
 set -u
-set -o pipefail
-
-LOG_FILE="/tmp/visnux_install.log"
-> "$LOG_FILE"
-
-cleanup() {
-    clear
-}
-trap cleanup EXIT
 
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
 check_mount() {
     if ! mountpoint -q /mnt; then
-        dialog --title "BRO" --msgbox "Mount your drives BETTER noob. I see no /mnt >:(" 0 0; clear
+        dialog --title "BRO" --msgbox "Mount your drivers BETTER noob. I see no /mnt >:(" 0 0; clear
         return 1
     fi
     return 0
 }
 
 refresh_mirrors() {
-    pacman -Sy --noconfirm reflector curl >> "$LOG_FILE" 2>&1 || return 1
+    pacman -Sy --noconfirm reflector curl || return 1
 
+    echo "Finding mirrors for your location..."
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
     LOCATION=$(curl -s --max-time 5 https://ipinfo.io/country | tr -d '[:space:]')
 
     REFLECTOR_OK=true
     if [ -n "$LOCATION" ]; then
-        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || REFLECTOR_OK=false
+        reflector --country "$LOCATION" --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist || REFLECTOR_OK=false
     else
         REFLECTOR_OK=false
     fi
 
     if [ "$REFLECTOR_OK" = false ] || [ ! -s /etc/pacman.d/mirrorlist ]; then
-        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1
+        echo "Country-specific mirrors unavailable, trying global mirrors..."
+        reflector --latest 10 --protocol https --sort rate --download-timeout 5 --save /etc/pacman.d/mirrorlist
     fi
 
     if [ ! -s /etc/pacman.d/mirrorlist ]; then
+        echo "Reflector failed, restoring default mirrorlist..."
         cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
     fi
 
-    pacman -Syy --noconfirm archlinux-keyring >> "$LOG_FILE" 2>&1
+    pacman -Syy --noconfirm archlinux-keyring
 }
 
-NEW_HOSTNAME=""
-INIT_SYSTEM=""
-DESKTOP_ENV=""
-ENABLE_MULTILIB="yes"
-BOOT_MODE="bios"
-GRUB_DISK=""
-
-if [ -d /sys/firmware/efi/efivars ]; then
-    BOOT_MODE="uefi"
-fi
-
 while true; do
-    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 5 \
-        1 "Hostname" \
-        2 "Init Selection" \
-        3 "DE selection" \
-        4 "Enable Multilib (32-bit)" \
-        5 "Install" 3>&1 1>&2 2>&3 3>&-)
-
+    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 1 "User Account" 2 "Hostname" 3 "Root Password" 4 "Init Selection" 5 "DE selection" 6 "Install" 3>&1 1>&2 2>&3 3>&-)
+    
     STATUS=$?
     clear
 
-    if [ "$STATUS" -ne 0 ]; then
-        echo "You stopped the Installation Process"
+    if [ $STATUS -ne 0 ]; then
+        echo "You stopped the Instalation Process"
         break
     fi
-
+    
     if [ "$MENU" == "1" ]; then
         while true; do
-            NEW_HOSTNAME=$(dialog --title "Hostname" --inputbox "Create your hostname: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
-            if [ -z "$NEW_HOSTNAME" ]; then
+            USER_=$(dialog --title "User Creation" --inputbox "Please write a name for your user: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+            if [ -z "$USER_" ]; then
+                dialog --title "Uh oh.." --msgbox "You can't leave the username blank, try again" 0 0; clear
+                continue
+            fi
+            break
+        done
+        
+        while true; do
+            PASSWORD=$(dialog --title "Password" --insecure --passwordbox "Please make a password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
+            PASSWORD2=$(dialog --title "Password" --insecure --passwordbox "Please retype the password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
+            
+            if [ -z "$PASSWORD" ]; then
+                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
+            elif [ "$PASSWORD" == "$PASSWORD2" ]; then
+                dialog --title "Password Set!" --msgbox "Password has been set!" 0 0; clear
+                break
+            else
+                dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didnt match, try again" 0 0; clear
+            fi
+        done
+    fi
+    
+    if [ "$MENU" == "2" ]; then
+        while true; do
+            HOST=$(dialog --title "Hostname" --inputbox "Create your hostname: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+            if [ -z "$HOST" ]; then
                 dialog --title "Uh oh.." --msgbox "You can't leave the hostname blank, try again" 0 0; clear
                 continue
             fi
             break
         done
-        dialog --title "Success!" --msgbox "Your host name will be: $NEW_HOSTNAME." 0 0; clear
+        dialog --title "Success!" --msgbox "Your host name will be: $HOST." 0 0; clear
     fi
+    
+    if [ "$MENU" == "3" ]; then
+        while true; do
+            ROOT=$(dialog --title "Root password" --insecure --passwordbox "Please type in your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+            ROOT2=$(dialog --title "Root password" --insecure --passwordbox "Please retype your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+        
+            if [ -z "$ROOT" ]; then
+                dialog --title "Whoopsies..?" --msgbox "Yeah buddy you messed up your root password, re-do it bud" 0 0; clear
+            elif [ "$ROOT" == "$ROOT2" ]; then
+                dialog --title "Root Password Set!" --msgbox "Your root password has been set!" 0 0; clear
+                break
+            else
+                dialog --title "Whoopsies..?" --msgbox "Yeah buddy you messed up your root password, re-do it bud" 0 0; clear
+            fi
+        done
+    fi
+   
+    if [ "$MENU" == "4" ]; then
+        INIT=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 3 1 "systemd" 2 "openrc" 3 "runit" 3>&1 1>&2 2>&3 3>&-); clear
 
-    if [ "$MENU" == "2" ]; then
-        INIT_CHOICE=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 4 \
-            "systemd" "systemd" \
-            "openrc" "openrc" \
-            "runit" "runit" \
-            "dinit" "dinit" 3>&1 1>&2 2>&3 3>&-); clear
-
-        if [ -n "$INIT_CHOICE" ]; then
-            INIT_SYSTEM="$INIT_CHOICE"
+        if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
             if refresh_mirrors; then
+                MIRRORS_OK=true
                 dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
             else
-                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, using default mirrorlist." 0 0; clear
+                MIRRORS_OK=false
+                dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use the default mirrorlist at install time." 0 0; clear
             fi
         fi
     fi
-
-    if [ "$MENU" == "3" ]; then
-        DE_CHOICE=$(dialog --title "DE Selection" --menu "Choose your prefered DE: " 12 40 3 \
-            "kde" "KDE Plasma" \
-            "xfce" "XFCE4" \
-            "none" "No DE (CLI only)" 3>&1 1>&2 2>&3 3>&-); clear
-
-        if [ -n "$DE_CHOICE" ]; then
-            DESKTOP_ENV="$DE_CHOICE"
-        fi
-    fi
-
-    if [ "$MENU" == "4" ]; then
-        dialog --title "Multilib" --yesno "Enable 32-bit (multilib) repository support?" 0 0
-        if [ $? -eq 0 ]; then
-            ENABLE_MULTILIB="yes"
-        else
-            ENABLE_MULTILIB="no"
-        fi
-        clear
-    fi
-
+   
     if [ "$MENU" == "5" ]; then
+        DE=$(dialog --title "DE Selection" --menu "Choose your prefered DE: " 12 40 2 1 "KDE Plasma" 2 "XFCE4" 3>&1 1>&2 2>&3 3>&-); clear
+    fi
+   
+    if [ "$MENU" == "6" ]; then
 
         MISSING=""
-        [ -z "${NEW_HOSTNAME:-}" ] && MISSING="${MISSING}\n - Hostname"
-        [ -z "${INIT_SYSTEM:-}" ] && MISSING="${MISSING}\n - Init Selection"
-        [ -z "${DESKTOP_ENV:-}" ] && MISSING="${MISSING}\n - DE selection"
+        [ -z "${USER_:-}" ] && MISSING="${MISSING}\n - User Account"
+        [ -z "${HOST:-}" ] && MISSING="${MISSING}\n - Hostname"
+        [ -z "${ROOT:-}" ] && MISSING="${MISSING}\n - Root Password"
+        [ -z "${INIT:-}" ] && MISSING="${MISSING}\n - Init Selection"
+        [ -z "${DE:-}" ] && MISSING="${MISSING}\n - DE selection"
 
         if [ -n "$MISSING" ]; then
             dialog --title "Hold up!" --msgbox "You still need to finish these before installing:$MISSING" 0 0; clear
@@ -141,137 +142,52 @@ while true; do
         fi
 
         dialog --title "Warning!" --yesno "If you click confirm, Visnux Linux will install on your disk/partition. THIS ACTION CANT BE REVERSED! Soo do it at ur own risk <3" 0 0
-
+        
         STATUS=$?
         clear
-
-        if [ "$STATUS" -ne 0 ]; then
-            echo "You stopped the Installation Process"
+      
+        if [ $STATUS -ne 0 ]; then
+            echo "You stopped the Instalation Process"
+            echo "PS: we dont save anything so you gotta do evreything again :("
             break
         else
-            MNT_DEV=$(findmnt -n -o SOURCE /mnt)
-            GRUB_DISK=$(lsblk -no PKNAME "$MNT_DEV" | head -n1)
-            [ -n "$GRUB_DISK" ] && GRUB_DISK="/dev/$GRUB_DISK" || GRUB_DISK="/dev/sda"
-
-            dialog --title "Installing..." --infobox "Installation in progress. Logs are written to $LOG_FILE..." 0 0
-
-            if [ "$INIT_SYSTEM" = "systemd" ]; then
-                command -v pacstrap &>/dev/null || { echo "'pacstrap' not found."; exit 1; }
-
-                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
-
-                pacman -Sy archlinux-keyring --noconfirm >> "$LOG_FILE" 2>&1
-                pacstrap /mnt base base-devel linux linux-firmware sof-firmware >> "$LOG_FILE" 2>&1
-
-                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
-                sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
-
-                if grep -q '^\[multilib\]$' /mnt/etc/pacman.conf; then
-                    sed -i '/^\[multilib\]/,/^\[/ s#^Include = /etc/pacman.d/mirrorlist$#Include = /etc/pacman.d/mirrorlist#' /mnt/etc/pacman.conf
-                elif [ "$ENABLE_MULTILIB" = "yes" ]; then
-                    cat >> /mnt/etc/pacman.conf <<'EOF'
-
-[multilib]
-Include = /etc/pacman.d/mirrorlist
-EOF
-                fi
-            else
-                ARTIX_BOOTSTRAP_CONF="/tmp/visnux-artix-bootstrap.conf"
-                cat > "$ARTIX_BOOTSTRAP_CONF" <<EOF
-[options]
-Architecture = auto
-Color
-CheckSpace
-ParallelDownloads = 12
-SigLevel = Never
-
-[system]
-Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-EOF
-
-                pacman --config "$ARTIX_BOOTSTRAP_CONF" -Sy --noconfirm artix-keyring >> "$LOG_FILE" 2>&1
-                pacman-key --init >> "$LOG_FILE" 2>&1
-                pacman-key --populate artix >> "$LOG_FILE" 2>&1
-
-                ARTIX_CONF="/tmp/visnux-artix.conf"
-                cat > "$ARTIX_CONF" <<EOF
-[options]
-Architecture = auto
-Color
-CheckSpace
-ParallelDownloads = 12
-SigLevel = Required DatabaseOptional
-LocalFileSigLevel = Optional
-
-[system]
-Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-[world]
-Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-[galaxy]
-Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-EOF
-
-                command -v pacstrap &>/dev/null || { echo "'pacstrap' not found."; exit 1; }
-
-                INIT_PKGS=""
-                case "$INIT_SYSTEM" in
-                    openrc) INIT_PKGS="openrc elogind-openrc" ;;
-                    runit)  INIT_PKGS="runit runit-rc elogind-runit" ;;
-                    dinit)  INIT_PKGS="dinit elogind-dinit" ;;
-                esac
-
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist $INIT_PKGS >> "$LOG_FILE" 2>&1
-
-                echo 'Server = https://mirrors.rit.edu/artixlinux/$repo/os/$arch' > /mnt/etc/pacman.d/mirrorlist
-
-                sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
-                sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
-
-                arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist >> "$LOG_FILE" 2>&1
-                arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support >> "$LOG_FILE" 2>&1
-                arch-chroot /mnt pacman-key --populate archlinux >> "$LOG_FILE" 2>&1
-
-                if [ "$ENABLE_MULTILIB" = "yes" ]; then
-                    if ! grep -q '^\[multilib\]$' /mnt/etc/pacman.conf; then
-                        cat >> /mnt/etc/pacman.conf <<'EOF'
-
-[multilib]
-Include = /etc/pacman.d/mirrorlist-arch
-EOF
-                    fi
-                fi
+            TIMEZONE=$(curl -s https://ipinfo.io/timezone)
+            if [ -z "$TIMEZONE" ] || [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
+                TIMEZONE="UTC"
             fi
 
-            genfstab -U /mnt > /mnt/etc/fstab
+            INIT_OK=true
 
-            cat > /mnt/root/chroot-install.sh <<CHROOT_EOF
-#!/bin/bash
-set -e
+# systemd
+            if [ "$INIT" == "1" ]; then
+                DE_PKGS=""
+                if [ "$DE" == "1" ]; then
+                    DE_PKGS="plasma-desktop sddm konsole dolphin"
+                elif [ "$DE" == "2" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
+                fi
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()  { echo -e "\${GREEN}[CHROOT]\${NC}  \$*"; }
-warn()  { echo -e "\${YELLOW}[CHROOT]\${NC}  \$*"; }
-
-BOOT_MODE="${BOOT_MODE}"
-INIT_SYSTEM="${INIT_SYSTEM}"
-DESKTOP_ENV="${DESKTOP_ENV}"
-NEW_HOSTNAME="${NEW_HOSTNAME}"
-GRUB_DISK="${GRUB_DISK}"
-
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
+                genfstab -U /mnt > /mnt/etc/fstab
+                
+                arch-chroot /mnt /bin/bash <<EOF
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "$HOST" > /etc/hostname
 
-pacman -Sy --noconfirm git ttf-iosevka-nerd ttf-adwaitamono-nerd fish flatpak papirus-icon-theme
-mkdir -p /usr/share/icons/hicolor/scalable/apps/
-mkdir -p /usr/share/pixmaps/
-
-echo "\${NEW_HOSTNAME}" > /etc/hostname
-cat > /etc/hosts <<EOF
+cat <<HOSTSEOF > /etc/hosts
 127.0.0.1   localhost
 ::1         localhost
-127.0.1.1   \${NEW_HOSTNAME}.localdomain \${NEW_HOSTNAME}
-EOF
+127.0.1.1   $HOST.localdomain $HOST
+HOSTSEOF
 
-cat > /etc/os-release <<'EOF'
+mkinitcpio -P
+
+cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
@@ -281,183 +197,178 @@ ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
 LOGO=visnux
-EOF
+OSSEOF
 
+echo "root:$ROOT" | chpasswd
+useradd -m -G wheel $USER_
+echo "$USER_:$PASSWORD" | chpasswd
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+grub-mkconfig -o /boot/grub/grub.cfg
+
+systemctl enable NetworkManager
+
+if [ "$DE" == "1" ]; then
+    systemctl enable sddm
+elif [ "$DE" == "2" ]; then
+    systemctl enable lightdm
+fi
+EOF
+                [ $? -ne 0 ] && INIT_OK=false
+            fi
+
+# openrc
+            if [ "$INIT" == "2" ]; then
+                DE_PKGS=""
+                DESKTOP_PKGS=""
+                if [ "$DE" == "1" ]; then
+                    DE_PKGS="plasma-desktop konsole dolphin"
+                    DESKTOP_PKGS="sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+                elif [ "$DE" == "2" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies"
+                    DESKTOP_PKGS="lightdm lightdm-openrc lightdm-gtk-greeter power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+                fi
+
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist grub efibootmgr sudo git \
+                    openrc elogind-openrc networkmanager networkmanager-openrc dbus dbus-openrc turnstile turnstile-openrc $DE_PKGS $DESKTOP_PKGS || INIT_OK=false
+
+                genfstab -U /mnt > /mnt/etc/fstab
+
+                arch-chroot /mnt /bin/bash <<EOF
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "$HOST" > /etc/hostname
 
-if [ "\${INIT_SYSTEM}" = "systemd" ]; then
+cat <<HOSTSEOF > /etc/hosts
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $HOST.localdomain $HOST
+HOSTSEOF
 
-    if [ "\${DESKTOP_ENV}" = "kde" ]; then
-        pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
-        systemctl enable NetworkManager
-        systemctl enable sddm --force
+cat <<OSSEOF > /etc/os-release
+NAME="Visnux"
+PRETTY_NAME="Visnux Linux"
+ID=visnux
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;85;255;85"
+HOME_URL="https://visnux.duckdns.org/"
+DOCUMENTATION_URL="https://visnux.duckdns.org/"
+LOGO=visnux
+OSSEOF
 
-    elif [ "\${DESKTOP_ENV}" = "xfce" ]; then
-        pacman -S xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
-        systemctl enable NetworkManager
-        systemctl enable sddm --force
+echo "root:$ROOT" | chpasswd
+useradd -m -G wheel $USER_
+echo "$USER_:$PASSWORD" | chpasswd
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-    else
-        info "Skipping Desktop Environment installation."
-        pacman -S networkmanager neovim nano sudo --noconfirm
-        systemctl enable NetworkManager
-    fi
+arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
+arch-chroot /mnt pacman-key --populate archlinux
 
-else
+mkinitcpio -P
 
-    if [ "\${DESKTOP_ENV}" = "kde" ]; then
-        DE_PKGS="plasma konsole dolphin"
-        DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-\${INIT_SYSTEM} power-profiles-daemon power-profiles-daemon-\${INIT_SYSTEM} pipewire pipewire-\${INIT_SYSTEM} pipewire-pulse pipewire-pulse-\${INIT_SYSTEM} wireplumber wireplumber-\${INIT_SYSTEM}"
-
-    elif [ "\${DESKTOP_ENV}" = "xfce" ]; then
-        DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-        DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-\${INIT_SYSTEM} power-profiles-daemon power-profiles-daemon-\${INIT_SYSTEM} pipewire pipewire-\${INIT_SYSTEM} pipewire-pulse pipewire-pulse-\${INIT_SYSTEM} wireplumber wireplumber-\${INIT_SYSTEM}"
-
-    else
-        DE_PKGS=""
-        DESKTOP_PKGS=""
-        info "Skipping Desktop Environment installation."
-    fi
-
-    pacman -S \
-        \${DE_PKGS} \
-        \${DESKTOP_PKGS} \
-        turnstile turnstile-\${INIT_SYSTEM} \
-        networkmanager networkmanager-\${INIT_SYSTEM} \
-        dbus dbus-\${INIT_SYSTEM} \
-        neovim nano sudo \
-        --noconfirm
-
-    case "\${INIT_SYSTEM}" in
-        openrc)
-            rc-update add dbus default
-            rc-update add elogind default
-            rc-update add NetworkManager default
-            rc-update add turnstile default
-            if [ "\${DESKTOP_ENV}" != "none" ]; then
-                rc-update add sddm default
-                rc-update add power-profiles-daemon default
-            fi
-            ;;
-
-        runit)
-            mkdir -p /etc/runit/runsvdir/default
-            for service in dbus elogind NetworkManager turnstiled; do
-                if [ -d "/etc/runit/sv/\${service}" ] && [ ! -e "/etc/runit/runsvdir/default/\${service}" ]; then
-                    ln -s "/etc/runit/sv/\${service}" "/etc/runit/runsvdir/default/\${service}"
-                fi
-            done
-            if [ "\${DESKTOP_ENV}" != "none" ] &&
-               [ -d "/etc/runit/sv/sddm" ] &&
-               [ ! -e "/etc/runit/runsvdir/default/sddm" ]; then
-                ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/sddm
-                ln -s /etc/runit/sv/power-profiles-daemon /etc/runit/runsvdir/default/power-profiles-daemon
-            fi
-            ;;
-
-        dinit)
-            ln -s ../dbus /etc/dinit.d/boot.d/
-            ln -s ../elogind /etc/dinit.d/boot.d/
-            ln -s ../NetworkManager /etc/dinit.d/boot.d/
-            ln -s ../turnstiled /etc/dinit.d/boot.d/
-            if [ "\${DESKTOP_ENV}" != "none" ]; then
-                ln -s ../sddm /etc/dinit.d/boot.d/
-                ln -s ../power-profiles-daemon /etc/dinit.d/boot.d/
-            fi
-            ;;
-    esac
-
-fi
-
-info "Installing mesa drivers for intel, amd and nouveau..."
-pacman -S mesa lib32-mesa \
-  vulkan-intel lib32-vulkan-intel \
-  vulkan-radeon lib32-vulkan-radeon \
-  vulkan-nouveau lib32-vulkan-nouveau \
-  vulkan-swrast lib32-vulkan-swrast \
-  libva intel-media-driver --noconfirm --needed
-
-info "Installing GRUB..."
-
-if [ "\${BOOT_MODE}" = "uefi" ]; then
-    pacman -S --noconfirm grub efibootmgr
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=visnux
-else
-    pacman -S --noconfirm grub
-    grub-install --recheck "\${GRUB_DISK}"
-fi
-
-sed -i 's/GRUB_DISTRIBUTOR="Arch"/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub
-sed -i 's/GRUB_DISTRIBUTOR="Artix"/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub
-
-git clone https://github.com/beamyyl/fastfetch
-mkdir -p /etc/skel/.config
-cp -r fastfetch/* /etc/skel/.config/
-rm -rf fastfetch
-
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-echo ""
-info "Set the ROOT password:"
+rc-update add dbus default
+rc-update add elogind default
+rc-update add NetworkManager default
+rc-update add turnstile default
+if [ "$DE" == "1" ]; then
+    rc-update add sddm default
+elif [ "$DE" == "2" ]; then
+    rc-update add lightdm default
+fi
+EOF
+                [ $? -ne 0 ] && INIT_OK=false
+            fi
 
-while ! passwd; do
-    warn "Password change failed or passwords did not match. Please try again."
+# runit
+            if [ "$INIT" == "3" ]; then
+                DE_PKGS=""
+                DESKTOP_PKGS=""
+                if [ "$DE" == "1" ]; then
+                    DE_PKGS="plasma-desktop konsole dolphin"
+                    DESKTOP_PKGS="sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+                elif [ "$DE" == "2" ]; then
+                    DE_PKGS="xfce4 xfce4-goodies"
+                    DESKTOP_PKGS="lightdm lightdm-runit lightdm-gtk-greeter power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+                fi
+
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware artix-keyring artix-mirrorlist grub efibootmgr sudo git \
+                    runit runit-rc elogind-runit networkmanager networkmanager-runit dbus dbus-runit turnstile turnstile-runit $DE_PKGS $DESKTOP_PKGS || INIT_OK=false
+
+                genfstab -U /mnt > /mnt/etc/fstab
+
+                arch-chroot /mnt /bin/bash <<EOF
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "$HOST" > /etc/hostname
+
+cat <<HOSTSEOF > /etc/hosts
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $HOST.localdomain $HOST
+HOSTSEOF
+
+cat <<OSSEOF > /etc/os-release
+NAME="Visnux"
+PRETTY_NAME="Visnux Linux"
+ID=visnux
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;85;255;85"
+HOME_URL="https://visnux.duckdns.org/"
+DOCUMENTATION_URL="https://visnux.duckdns.org/"
+LOGO=visnux
+OSSEOF
+
+echo "root:$ROOT" | chpasswd
+useradd -m -G wheel $USER_
+echo "$USER_:$PASSWORD" | chpasswd
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+arch-chroot /mnt pacman -Sy --noconfirm artix-mirrorlist
+arch-chroot /mnt pacman -Sy --noconfirm artix-archlinux-support
+arch-chroot /mnt pacman-key --populate archlinux
+
+mkinitcpio -P
+
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+grub-mkconfig -o /boot/grub/grub.cfg
+
+mkdir -p /etc/runit/runsvdir/default
+for service in dbus elogind NetworkManager turnstiled; do
+    if [ -d "/etc/runit/sv/\${service}" ] && [ ! -e "/etc/runit/runsvdir/default/\${service}" ]; then
+        ln -s "/etc/runit/sv/\${service}" "/etc/runit/runsvdir/default/\${service}"
+    fi
 done
 
-echo ""
-echo -e "\${CYAN}[INPUT]\${NC} Would you like to create a new user? (y/n)"
-read -rp "  Choice: " CREATE_USER
-
-if [[ "\${CREATE_USER}" =~ ^[Yy]$ ]]; then
-
-    while true; do
-        echo -e "\${CYAN}[INPUT]\${NC} Enter the new username:"
-        read -rp "  Username: " NEW_USER
-
-        if [ -n "\${NEW_USER}" ]; then
-            break
-        fi
-
-        warn "Username cannot be empty. Please try again."
-    done
-
-    echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel
-    chmod 440 /etc/sudoers.d/wheel
-
-    useradd -m -G wheel,audio,video,input -s /usr/bin/fish "\${NEW_USER}"
-
-    info "User '\${NEW_USER}' created and added to: wheel, audio, video, input"
-    info "Set a password for '\${NEW_USER}':"
-
-    while ! passwd "\${NEW_USER}"; do
-        warn "Password change failed or passwords did not match. Please try again."
-    done
-
-    info "Cloning and setting up dotfiles for '\${NEW_USER}'..."
-    su - "\${NEW_USER}" -c "cd ~ && mkdir -p ~/.config && git clone https://github.com/beamyyl/maindots && cp -r maindots/* ~/.config/ && rm -rf maindots && [ ! -f ~/.config/fastfetch/config.jsonc ] || sed -i 's/\"top\": 2/\"top\": 1/' ~/.config/fastfetch/config.jsonc"
-    info "Dotfiles installed successfully."
-    info "User setup complete."
-
-elif [[ "\${CREATE_USER}" =~ ^[Nn]$ ]]; then
-    info "Skipping user creation."
-else
-    warn "Invalid choice '\${CREATE_USER}'. Skipping user creation."
+if [ "$DE" == "1" ] && [ -d "/etc/runit/sv/sddm" ]; then
+    ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/sddm
+elif [ "$DE" == "2" ] && [ -d "/etc/runit/sv/lightdm" ]; then
+    ln -s /etc/runit/sv/lightdm /etc/runit/runsvdir/default/lightdm
 fi
+EOF
+                [ $? -ne 0 ] && INIT_OK=false
+            fi
 
-CHROOT_EOF
-
-            chmod +x /mnt/root/chroot-install.sh
-            arch-chroot /mnt /bin/bash /root/chroot-install.sh >> "$LOG_FILE" 2>&1
-
-            rm -f /mnt/root/chroot-install.sh /tmp/visnux-artix-bootstrap.conf /tmp/visnux-artix.conf
-            umount -R /mnt 2>/dev/null || true
-
-            clear
-            dialog --title "All done!" --msgbox "Visnux installed successfully! Remove installation media and reboot." 0 0; clear
-            break
+            if [ "$INIT_OK" == "false" ]; then
+                dialog --title "Uh oh.." --msgbox "SOMETHING failed while installing, idk man" 0 0; clear
+            else
+                dialog --title "All done!" --msgbox "You installed! You can reboot the system." 0 0; clear
+            fi
         fi
     fi
-
+        
 done
