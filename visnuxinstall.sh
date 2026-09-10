@@ -193,7 +193,7 @@ useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -295,7 +295,7 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -416,7 +416,7 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
