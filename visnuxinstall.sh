@@ -150,6 +150,7 @@ while true; do
 
             INIT_OK=true
 
+            # ================= SYSTEMD INSTALL =================
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
                 pacman -Sy archlinux-keyring --noconfirm
@@ -212,6 +213,7 @@ EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
+            # ================= OPENRC INSTALL =================
             if [ "$INIT" == "2" ]; then
                 ARTIX_BOOTSTRAP_CONF="/tmp/visnux-artix-bootstrap.conf"
                 cat > "$ARTIX_BOOTSTRAP_CONF" <<EOF
@@ -332,6 +334,7 @@ EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
 
+            # ================= RUNIT INSTALL =================
             if [ "$INIT" == "3" ]; then
                 ARTIX_BOOTSTRAP_CONF="/tmp/visnux-artix-bootstrap.conf"
                 cat > "$ARTIX_BOOTSTRAP_CONF" <<EOF
@@ -442,23 +445,15 @@ pacman -S \
     nano sudo \
     --noconfirm
 
-# Correct runit directory creation and symlinking
-mkdir -p /run/runit/runsvdir/default
 mkdir -p /etc/runit/runsvdir/default
+mkdir -p /run/runit/service
 
-for service in dbus elogind NetworkManager turnstiled; do
-    if [ -d "/etc/runit/sv/$service" ] && [ ! -e "/etc/runit/runsvdir/default/$service" ]; then
-        ln -s "/etc/runit/sv/$service" "/etc/runit/runsvdir/default/$service"
+for svc in dbus elogind networkmanager turnstiled sddm power-profiles-daemon; do
+    if [ -d "/etc/runit/sv/\$svc" ]; then
+        ln -sf "/etc/runit/sv/\$svc" /etc/runit/runsvdir/default/
+        ln -sf "/etc/runit/sv/\$svc" /run/runit/service/
     fi
 done
-
-if [ -d "/etc/runit/sv/sddm" ] && [ ! -e "/etc/runit/runsvdir/default/sddm" ]; then
-    ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/sddm
-fi
-
-if [ -d "/etc/runit/sv/power-profiles-daemon" ] && [ ! -e "/etc/runit/runsvdir/default/power-profiles-daemon" ]; then
-    ln -s /etc/runit/sv/power-profiles-daemon /etc/runit/runsvdir/default/power-profiles-daemon
-fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
             fi
