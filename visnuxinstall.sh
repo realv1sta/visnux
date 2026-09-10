@@ -34,6 +34,9 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring
 }
 
+# Display welcome message before main menu loop
+dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
+
 while true; do
     MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 \
         1 "User Account" \
@@ -439,16 +442,22 @@ pacman -S \
     nano sudo \
     --noconfirm
 
+# Correct runit directory creation and symlinking
+mkdir -p /run/runit/runsvdir/default
 mkdir -p /etc/runit/runsvdir/default
+
 for service in dbus elogind NetworkManager turnstiled; do
-    if [ -d "/etc/runit/sv/\${service}" ] && [ ! -e "/etc/runit/runsvdir/default/\${service}" ]; then
-        ln -s "/etc/runit/sv/\${service}" "/etc/runit/runsvdir/default/\${service}"
+    if [ -d "/etc/runit/sv/$service" ] && [ ! -e "/etc/runit/runsvdir/default/$service" ]; then
+        ln -s "/etc/runit/sv/$service" "/etc/runit/runsvdir/default/$service"
     fi
 done
 
-if [ "$DE" != "" ] && [ -d "/etc/runit/sv/sddm" ] && [ ! -e "/etc/runit/runsvdir/default/sddm" ]; then
+if [ -d "/etc/runit/sv/sddm" ] && [ ! -e "/etc/runit/runsvdir/default/sddm" ]; then
     ln -s /etc/runit/sv/sddm /etc/runit/runsvdir/default/sddm
-    [ -d "/etc/runit/sv/power-profiles-daemon" ] && ln -s /etc/runit/sv/power-profiles-daemon /etc/runit/runsvdir/default/power-profiles-daemon
+fi
+
+if [ -d "/etc/runit/sv/power-profiles-daemon" ] && [ ! -e "/etc/runit/runsvdir/default/power-profiles-daemon" ]; then
+    ln -s /etc/runit/sv/power-profiles-daemon /etc/runit/runsvdir/default/power-profiles-daemon
 fi
 EOF
                 [ $? -ne 0 ] && INIT_OK=false
