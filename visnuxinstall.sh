@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -u
+set -o pipefail
 
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
@@ -37,6 +38,47 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring >/dev/null 2>&1
 }
 
+# Write a self-contained pacman config for the Artix repos, with the mirror
+# URLs baked in directly (no Include -> separate mirrorlist-artix file, and
+# no indirection through an /mnt/... path that breaks the moment you chroot).
+# SigLevel is relaxed for these repos since we're pulling Artix packages onto
+# an Arch base without the Artix keyring pre-trusted. If you want proper
+# signature verification instead, import artix-keyring and switch this back
+# to "Required DatabaseOptional".
+write_artix_pacman_conf() {
+    cat <<'ARTIXPAC' > /etc/pacman.artix.conf
+[options]
+HoldPkg     = pacman glibc
+Architecture = auto
+LocalFileSigLevel = Optional
+SigLevel = Never
+
+[system]
+Server = https://mirror1.artixlinux.org/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.ding.im/$repo/os/$arch
+
+[world]
+Server = https://mirror1.artixlinux.org/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.ding.im/$repo/os/$arch
+
+[galaxy]
+Server = https://mirror1.artixlinux.org/$repo/os/$arch
+Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
+Server = https://artix.ding.im/$repo/os/$arch
+
+[universe]
+Server = https://universe.artixlinux.org/$arch
+Server = https://mirror1.artixlinux.org/universe/$arch
+Server = https://mirror.pascalpuffke.de/artix-universe/$arch
+Server = https://artixlinux.qontinuum.space/artixlinux/universe/os/$arch
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+ARTIXPAC
+}
+
 # Pre-declare variables to prevent unbound variable crashes under set -u
 USER_=""
 PASSWORD=""
@@ -44,7 +86,6 @@ HOST=""
 ROOT=""
 INIT=""
 DE=""
-MIRRORS_OK=false
 
 while true; do
     MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 \
@@ -54,15 +95,15 @@ while true; do
         4 "Init Selection" \
         5 "DE selection" \
         6 "Install" 3>&1 1>&2 2>&3 3>&-)
-    
+
     STATUS=$?
     clear
 
-    if [ $STATUS -ne 0 ]; then
+    if [ "$STATUS" -ne 0 ]; then
         echo "You stopped the Installation Process"
         break
     fi
-    
+
     if [ "$MENU" == "1" ]; then
         while true; do
             USER_=$(dialog --title "User Creation" --inputbox "Please write a name for your user: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
@@ -72,11 +113,11 @@ while true; do
             fi
             break
         done
-        
+
         while true; do
             PASSWORD=$(dialog --title "Password" --insecure --passwordbox "Please make a password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
             PASSWORD2=$(dialog --title "Password" --insecure --passwordbox "Please retype the password for: $USER_" 0 0 3>&1 1>&2 2>&3 3>&-); clear
-            
+
             if [ -z "$PASSWORD" ]; then
                 dialog --title "Uh oh.." --msgbox "Whoops, your secure passwords didn't match, try again" 0 0; clear
             elif [ "$PASSWORD" == "$PASSWORD2" ]; then
@@ -87,7 +128,7 @@ while true; do
             fi
         done
     fi
-    
+
     if [ "$MENU" == "2" ]; then
         while true; do
             HOST=$(dialog --title "Hostname" --inputbox "Create your hostname: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
@@ -99,12 +140,12 @@ while true; do
         done
         dialog --title "Success!" --msgbox "Your host name will be: $HOST." 0 0; clear
     fi
-    
+
     if [ "$MENU" == "3" ]; then
         while true; do
             ROOT=$(dialog --title "Root password" --insecure --passwordbox "Please type in your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
             ROOT2=$(dialog --title "Root password" --insecure --passwordbox "Please retype your root password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
-        
+
             if [ -z "$ROOT" ]; then
                 dialog --title "Whoopsies..?" --msgbox "Yeah buddy you messed up your root password, re-do it bud" 0 0; clear
             elif [ "$ROOT" == "$ROOT2" ]; then
@@ -115,7 +156,7 @@ while true; do
             fi
         done
     fi
-   
+
     if [ "$MENU" == "4" ]; then
         INIT=$(dialog --title "Init Selection" --menu "Choose your prefered init: " 12 40 3 \
             "init_systemd" "systemd" \
@@ -125,21 +166,19 @@ while true; do
         if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
             if refresh_mirrors; then
-                MIRRORS_OK=true
                 dialog --title "Mirrors" --msgbox "Mirrors updated!" 0 0; clear
             else
-                MIRRORS_OK=false
                 dialog --title "Uh oh.." --msgbox "Mirror refresh failed, will use default mirrorlist." 0 0; clear
             fi
         fi
     fi
-   
+
     if [ "$MENU" == "5" ]; then
         DE=$(dialog --title "DE Selection" --menu "Choose your prefered DE: " 12 40 2 \
             "de_kde" "KDE Plasma" \
             "de_xfce" "XFCE4" 3>&1 1>&2 2>&3 3>&-); clear
     fi
-   
+
     if [ "$MENU" == "6" ]; then
 
         MISSING=""
@@ -160,11 +199,11 @@ while true; do
         fi
 
         dialog --title "Warning!" --yesno "If you click confirm, Visnux Linux will install on your disk/partition. THIS ACTION CANT BE REVERSED! Soo do it at ur own risk <3" 0 0
-        
+
         STATUS=$?
         clear
-      
-        if [ $STATUS -ne 0 ]; then
+
+        if [ "$STATUS" -ne 0 ]; then
             echo "You stopped the Installation Process"
             echo "PS: we dont save anything so you gotta do evreything again :("
             break
@@ -176,36 +215,9 @@ while true; do
 
             INIT_OK=true
 
-            # Set up Artix Repositories if using OpenRC or Runit
+            # Artix repos are only needed for OpenRC / Runit installs.
             if [ "$INIT" == "init_openrc" ] || [ "$INIT" == "init_runit" ]; then
-                mkdir -p /mnt/etc/pacman.d
-                cat <<'ARTIXMIRROR' > /mnt/etc/pacman.d/mirrorlist-artix
-Server = https://mirror1.artixlinux.org/$repo/os/$arch
-Server = https://mirror.pascalpuffke.de/artixlinux/$repo/os/$arch
-Server = https://artix.ding.im/$repo/os/$arch
-ARTIXMIRROR
-
-                cat <<'ARTIXPAC' > /etc/pacman.artix.conf
-[options]
-HoldPkg     = pacman glibc
-Architecture = auto
-LocalFileSigLevel = Optional
-
-[system]
-Include = /mnt/etc/pacman.d/mirrorlist-artix
-
-[world]
-Include = /mnt/etc/pacman.d/mirrorlist-artix
-
-[galaxy]
-Include = /mnt/etc/pacman.d/mirrorlist-artix
-
-[universe]
-Include = /mnt/etc/pacman.d/mirrorlist-artix
-
-[extra]
-Include = /etc/pacman.d/mirrorlist
-ARTIXPAC
+                write_artix_pacman_conf
             fi
 
             # --------------------------
@@ -219,11 +231,15 @@ ARTIXPAC
                     DE_PKGS="xfce4 xfce4-goodies lightdm lightdm-gtk-greeter"
                 fi
 
+                # shellcheck disable=SC2086
                 pacstrap -K /mnt base linux linux-firmware networkmanager grub efibootmgr sudo $DE_PKGS || INIT_OK=false
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt >> /mnt/etc/fstab
-                    
+                    # Carry the fast mirrorlist we found on the host into the new install.
+                    cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
+
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -283,13 +299,16 @@ EOF
                     DE_PKGS="xfce4 xfce4-goodies lightdm-openrc lightdm-gtk-greeter"
                 fi
 
+                # shellcheck disable=SC2086
                 pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware openrc openrc-systemdcompat elogind-openrc networkmanager-openrc grub efibootmgr sudo $DE_PKGS || INIT_OK=false
-                
+
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
+                    cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -338,7 +357,7 @@ EOF
                     [ $? -ne 0 ] && INIT_OK=false
                 fi
             fi
-            
+
             # --------------------------
             # RUNIT INSTALLATION (ARTIX REPOS)
             # --------------------------
@@ -350,13 +369,16 @@ EOF
                     DE_PKGS="xfce4 xfce4-goodies lightdm-runit lightdm-gtk-greeter"
                 fi
 
+                # shellcheck disable=SC2086
                 pacstrap -C /etc/pacman.artix.conf -K /mnt base linux linux-firmware runit runit-systemdcompat elogind-runit networkmanager-runit grub efibootmgr sudo $DE_PKGS || INIT_OK=false
-                
+
                 if [ "$INIT_OK" == "true" ]; then
                     cp /etc/pacman.artix.conf /mnt/etc/pacman.conf
                     genfstab -U /mnt >> /mnt/etc/fstab
+                    cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
 
                     arch-chroot /mnt env USER_="$USER_" HOST="$HOST" ROOT="$ROOT" PASSWORD="$PASSWORD" TIMEZONE="$TIMEZONE" DE="$DE" /bin/bash <<'EOF'
+set -u
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 hwclock --systohc
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -413,5 +435,5 @@ EOF
             fi
         fi
     fi
-        
+
 done
