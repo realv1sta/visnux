@@ -185,7 +185,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=visnux
+LOGO=linux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
@@ -193,15 +193,16 @@ useradd -m -G wheel $USER_
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
 if [ "$DE" == "1" ]; then
-    pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
+    pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --noconfirm
     systemctl enable NetworkManager
     systemctl enable sddm --force
 elif [ "$DE" == "2" ]; then
-    pacman -S xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager neovim nano sudo power-profiles-daemon --noconfirm
+    pacman -S xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --noconfirm
     systemctl enable NetworkManager
     systemctl enable sddm --force
 fi
@@ -284,7 +285,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=visnux
+LOGO=linux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
@@ -294,7 +295,8 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
 DE_PKGS=""
@@ -314,7 +316,7 @@ pacman -S \
     turnstile turnstile-openrc \
     networkmanager networkmanager-openrc \
     dbus dbus-openrc \
-    neovim nano sudo \
+    nano sudo \
     --noconfirm
 
 rc-update add dbus default
@@ -404,7 +406,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=visnux
+LOGO=linux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
@@ -414,7 +416,8 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB || grub-install /dev/sda
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux Linux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux Linux"' >> /etc/default/grub
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
 DE_PKGS=""
@@ -434,7 +437,7 @@ pacman -S \
     turnstile turnstile-runit \
     networkmanager networkmanager-runit \
     dbus dbus-runit \
-    neovim nano sudo \
+    nano sudo \
     --noconfirm
 
 mkdir -p /etc/runit/runsvdir/default
