@@ -423,8 +423,16 @@ EOF
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
-                    sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
-                    sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
+                    # Propagate the SAME known-working mirrors used for pacstrap
+                    # into the target's own pacman.conf. Without this, the stock
+                    # pacman.conf that ships inside the base package silently
+                    # takes over here, pointing at Artix's generic default mirror
+                    # set - which may be entirely different (and, as seen, may
+                    # be broken/unreachable) from the two mirrors we already
+                    # proved work moments ago during pacstrap.
+                    cp "$ARTIX_CONF" /mnt/etc/pacman.conf
+                    sed -i '/^DatabaseOptional/d' /mnt/etc/pacman.conf
+                    grep -q '^ILoveCandy' /mnt/etc/pacman.conf || sed -i '/^Color/a ILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
@@ -551,8 +559,12 @@ EOF
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
-                    sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
-                    sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
+                    # Same fix as the openrc branch: carry the known-working
+                    # pacstrap mirrors into the target instead of letting the
+                    # stock default pacman.conf silently override them.
+                    cp "$ARTIX_CONF" /mnt/etc/pacman.conf
+                    sed -i '/^DatabaseOptional/d' /mnt/etc/pacman.conf
+                    grep -q '^ILoveCandy' /mnt/etc/pacman.conf || sed -i '/^Color/a ILoveCandy' /mnt/etc/pacman.conf
 
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
