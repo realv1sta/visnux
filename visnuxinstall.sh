@@ -23,21 +23,10 @@ fix_keyrings_and_time() {
     echo "=== Synchronizing System Time & Fixing Keyrings ===" >> "$LOGFILE"
     timedatectl set-ntp true 2>/dev/null || true
     pacman-key --init >> "$LOGFILE" 2>&1 || true
-    # NOTE: deliberately NOT populating the artix keyring on the host/live
-    # environment here. pacstrap for openrc/runit uses a custom pacman.conf
-    # with "SigLevel = Optional TrustAll", so signature verification against
-    # the artix keyring is skipped entirely during pacstrap - populating it
-    # on the host achieves nothing but produces a scary, confusing error
-    # ("keyring file ... does not exist") on live media that doesn't already
-    # ship artix-keyring. The actual artix keyring populate that matters
-    # happens later, inside the target chroot, per init branch.
     pacman-key --populate archlinux >> "$LOGFILE" 2>&1 || true
 }
 
-# Fails fast with a clear message instead of letting the user discover 20
-# cryptic pacman mirror errors deep into the install. Checks raw connectivity
-# (bypasses DNS), then DNS resolution, then clock sanity (a badly-off clock
-# breaks HTTPS certificate validation and looks identical to "no internet").
+
 network_preflight_check() {
     local ok=true
     local msg=""
@@ -72,10 +61,6 @@ nameserver 8.8.8.8
 EOF
 }
 
-# Writes a NetworkManager keyfile connection profile straight into the
-# target filesystem so the machine auto-joins Wi-Fi on first boot with
-# zero manual nmtui/nmcli steps. No-op if the user skipped Wi-Fi setup
-# (e.g. they're on ethernet).
 setup_wifi_connection() {
     if [ -z "$WIFI_SSID" ]; then
         echo "=== No Wi-Fi SSID configured, skipping connection profile ===" >> "$LOGFILE"
@@ -114,18 +99,11 @@ setup_wifi_connection() {
         echo "addr-gen-mode=default"
     } > "$conn_file"
 
-    # NetworkManager refuses to load connection files that aren't
-    # strictly root-owned and 600 - this is a hard requirement, not
-    # a nicety, so get it right or wifi silently won't auto-connect.
     chmod 600 "$conn_file"
     chown root:root "$conn_file" 2>/dev/null || true
 }
 
-# Enables a service under a runit runsvdir by searching for the real
-# directory name case-insensitively, instead of assuming exact casing.
-# Different packages/versions ship different casing (NetworkManager vs
-# networkmanager, turnstiled vs turnstile, etc) and a hardcoded name that
-# doesn't match silently does nothing - this logs a clear warning instead.
+
 enable_runit_service() {
     local pattern="$1"
     local svdir
@@ -138,8 +116,7 @@ enable_runit_service() {
     fi
 }
 
-# Same idea for OpenRC: confirm the init script actually exists under
-# /etc/init.d before calling rc-update, and search case-insensitively.
+
 enable_openrc_service() {
     local pattern="$1"
     local svc
@@ -324,7 +301,7 @@ while true; do
             INIT_OK=true
             fix_keyrings_and_time
 
-            # ================= SYSTEMD INSTALL =================
+#systemd
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
                 
@@ -341,7 +318,7 @@ while true; do
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman -Sy --noconfirm archlinux-keyring || true
 
-# Set DNS (not locked - NetworkManager needs to manage this after install)
+
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
 
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -395,7 +372,7 @@ EOF
                 fi
             fi
 
-            # ================= OPENRC INSTALL =================
+#openrc
             if [ "$INIT" == "2" ]; then
                 ARTIX_CONF="/tmp/visnux-artix.conf"
                 cat > "$ARTIX_CONF" <<EOF
@@ -435,13 +412,6 @@ EOF
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
-                    # Propagate the SAME known-working mirrors used for pacstrap
-                    # into the target's own pacman.conf. Without this, the stock
-                    # pacman.conf that ships inside the base package silently
-                    # takes over here, pointing at Artix's generic default mirror
-                    # set - which may be entirely different (and, as seen, may
-                    # be broken/unreachable) from the two mirrors we already
-                    # proved work moments ago during pacstrap.
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
                     sed -i '/^DatabaseOptional/d' /mnt/etc/pacman.conf
                     grep -q '^ILoveCandy' /mnt/etc/pacman.conf || sed -i '/^Color/a ILoveCandy' /mnt/etc/pacman.conf
@@ -451,7 +421,6 @@ EOF
                     setup_wifi_connection
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
-# Set DNS (not locked - NetworkManager needs to manage this after install)
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
 
 pacman-key --init
@@ -543,7 +512,7 @@ SVCEOF
                 rm -f "$ARTIX_CONF"
             fi
 
-            # ================= RUNIT INSTALL =================
+#runit
             if [ "$INIT" == "3" ]; then
                 ARTIX_CONF="/tmp/visnux-artix.conf"
                 cat > "$ARTIX_CONF" <<EOF
@@ -583,9 +552,6 @@ EOF
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
-                    # Same fix as the openrc branch: carry the known-working
-                    # pacstrap mirrors into the target instead of letting the
-                    # stock default pacman.conf silently override them.
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
                     sed -i '/^DatabaseOptional/d' /mnt/etc/pacman.conf
                     grep -q '^ILoveCandy' /mnt/etc/pacman.conf || sed -i '/^Color/a ILoveCandy' /mnt/etc/pacman.conf
@@ -595,7 +561,6 @@ EOF
                     setup_wifi_connection
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
-# Set DNS (not locked - NetworkManager needs to manage this after install)
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
@@ -649,13 +614,6 @@ DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    # NOTE: no pipewire-runit / wireplumber-runit / turnstile-runit here on
-    # purpose - they don't exist. Turnstile's runit backend is explicitly
-    # unsupported per Artix's own docs (dinit is the only supported backend),
-    # and pipewire/wireplumber are meant to run as per-user session services,
-    # autostarted via the pipewire.desktop XDG autostart entry that ships
-    # inside the plain "pipewire" package itself - same mechanism regardless
-    # of init system, no dedicated runit service required.
     DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
