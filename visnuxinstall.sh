@@ -408,16 +408,28 @@ DatabaseOptional
 SigLevel = Optional TrustAll
 
 [system]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 
 [world]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 
 [galaxy]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 EOF
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
@@ -544,16 +556,28 @@ DatabaseOptional
 SigLevel = Optional TrustAll
 
 [system]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 
 [world]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 
 [galaxy]
-Server = https://artix.dingo.kiwi/\$repo/os/\$arch
+Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
+Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
+Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
+Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 EOF
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
@@ -625,16 +649,22 @@ DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+    # NOTE: no pipewire-runit / wireplumber-runit / turnstile-runit here on
+    # purpose - they don't exist. Turnstile's runit backend is explicitly
+    # unsupported per Artix's own docs (dinit is the only supported backend),
+    # and pipewire/wireplumber are meant to run as per-user session services,
+    # autostarted via the pipewire.desktop XDG autostart entry that ships
+    # inside the plain "pipewire" package itself - same mechanism regardless
+    # of init system, no dedicated runit service required.
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-runit pipewire-pulse pipewire-pulse-runit wireplumber wireplumber-runit"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber"
 fi
 
 pacman -S \
     \$DE_PKGS \
     \$DESKTOP_PKGS \
-    turnstile turnstile-runit \
     networkmanager networkmanager-runit \
     dbus dbus-runit \
     nano sudo \
@@ -662,7 +692,7 @@ enable_runit_service() {
 echo "--- contents of /etc/runit/sv for reference ---"
 ls /etc/runit/sv 2>&1
 
-for svc in dbus elogind NetworkManager turnstiled sddm power-profiles-daemon; do
+for svc in dbus elogind NetworkManager sddm power-profiles-daemon; do
     enable_runit_service "$svc"
 done
 SVCEOF
