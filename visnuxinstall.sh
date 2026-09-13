@@ -342,7 +342,6 @@ cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
-ID_LIKE=arch
 BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
@@ -446,7 +445,6 @@ cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
-ID_LIKE=arch
 BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
@@ -590,7 +588,6 @@ cat <<OSSEOF > /etc/os-release
 NAME="Visnux"
 PRETTY_NAME="Visnux Linux"
 ID=visnux
-ID_LIKE=arch
 BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
