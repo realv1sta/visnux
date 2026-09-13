@@ -185,9 +185,8 @@ while true; do
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman -Sy --noconfirm archlinux-keyring || true
 
-# Set DNS & Lock
+# Set DNS (not locked - NetworkManager needs to manage this after install)
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
-chattr +i /etc/resolv.conf || true
 
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
@@ -275,8 +274,8 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+# Set DNS (not locked - NetworkManager needs to manage this after install)
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
-chattr +i /etc/resolv.conf || true
 
 pacman-key --init
 pacman-key --populate artix archlinux
@@ -387,13 +386,12 @@ EOF
                     setup_chroot_dns
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
-# Set hardcoded DNS and lock file
+# Set DNS (not locked - NetworkManager needs to manage this after install)
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 RESOLVEOF
-chattr +i /etc/resolv.conf || true
 
 pacman-key --init
 pacman-key --populate artix archlinux
@@ -457,12 +455,15 @@ pacman -S \
     nano sudo \
     --noconfirm
 
-# Enable services in Runit (ensures graphical target via SDDM)
+# Enable services in Runit (ensures NetworkManager + graphical target via SDDM)
+# NOTE: service dir names are case-sensitive - NetworkManager, not networkmanager.
 mkdir -p /etc/runit/runsvdir/default
 
-for svc in dbus elogind networkmanager turnstiled sddm power-profiles-daemon; do
+for svc in dbus elogind NetworkManager turnstiled sddm power-profiles-daemon; do
     if [ -d "/etc/runit/sv/\$svc" ]; then
         ln -sf "/etc/runit/sv/\$svc" /etc/runit/runsvdir/default/
+    else
+        echo "WARNING: service dir /etc/runit/sv/\$svc not found, skipping" >&2
     fi
 done
 EOF
