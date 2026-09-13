@@ -7,6 +7,8 @@ HOST=""
 ROOT=""
 INIT=""
 DE=""
+WIFI_SSID=""
+WIFI_PASS=""
 LOGFILE="/tmp/visnux_install.log"
 
 check_mount() {
@@ -30,6 +32,85 @@ setup_chroot_dns() {
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
+}
+
+# Writes a NetworkManager keyfile connection profile straight into the
+# target filesystem so the machine auto-joins Wi-Fi on first boot with
+# zero manual nmtui/nmcli steps. No-op if the user skipped Wi-Fi setup
+# (e.g. they're on ethernet).
+setup_wifi_connection() {
+    if [ -z "$WIFI_SSID" ]; then
+        echo "=== No Wi-Fi SSID configured, skipping connection profile ===" >> "$LOGFILE"
+        return 0
+    fi
+
+    echo "=== Writing NetworkManager connection profile for SSID: $WIFI_SSID ===" >> "$LOGFILE"
+
+    mkdir -p /mnt/etc/NetworkManager/system-connections
+    local uuid conn_file
+    uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-0000-0000-0000-000000000000")
+    conn_file="/mnt/etc/NetworkManager/system-connections/${WIFI_SSID}.nmconnection"
+
+    {
+        echo "[connection]"
+        echo "id=$WIFI_SSID"
+        echo "uuid=$uuid"
+        echo "type=wifi"
+        echo "autoconnect=true"
+        echo ""
+        echo "[wifi]"
+        echo "mode=infrastructure"
+        echo "ssid=$WIFI_SSID"
+        echo ""
+        if [ -n "$WIFI_PASS" ]; then
+            echo "[wifi-security]"
+            echo "key-mgmt=wpa-psk"
+            echo "psk=$WIFI_PASS"
+            echo ""
+        fi
+        echo "[ipv4]"
+        echo "method=auto"
+        echo ""
+        echo "[ipv6]"
+        echo "method=auto"
+        echo "addr-gen-mode=default"
+    } > "$conn_file"
+
+    # NetworkManager refuses to load connection files that aren't
+    # strictly root-owned and 600 - this is a hard requirement, not
+    # a nicety, so get it right or wifi silently won't auto-connect.
+    chmod 600 "$conn_file"
+    chown root:root "$conn_file" 2>/dev/null || true
+}
+
+# Enables a service under a runit runsvdir by searching for the real
+# directory name case-insensitively, instead of assuming exact casing.
+# Different packages/versions ship different casing (NetworkManager vs
+# networkmanager, turnstiled vs turnstile, etc) and a hardcoded name that
+# doesn't match silently does nothing - this logs a clear warning instead.
+enable_runit_service() {
+    local pattern="$1"
+    local svdir
+    svdir=$(find /etc/runit/sv -maxdepth 1 -iname "$pattern" -print -quit 2>/dev/null)
+    if [ -n "$svdir" ]; then
+        ln -sf "$svdir" /etc/runit/runsvdir/default/
+        echo "Enabled runit service: $svdir" >> /tmp/visnux_install.log 2>/dev/null || true
+    else
+        echo "WARNING: no runit service directory matching '$pattern' found under /etc/runit/sv - skipped" >&2
+    fi
+}
+
+# Same idea for OpenRC: confirm the init script actually exists under
+# /etc/init.d before calling rc-update, and search case-insensitively.
+enable_openrc_service() {
+    local pattern="$1"
+    local svc
+    svc=$(find /etc/init.d -maxdepth 1 -iname "$pattern" -print -quit 2>/dev/null)
+    if [ -n "$svc" ]; then
+        rc-update add "$(basename "$svc")" default
+    else
+        echo "WARNING: no OpenRC service matching '$pattern' found under /etc/init.d - skipped" >&2
+    fi
 }
 
 refresh_mirrors() {
@@ -59,13 +140,14 @@ refresh_mirrors() {
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
 
 while true; do
-    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 15 50 6 \
+    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 17 55 7 \
         1 "User Account" \
         2 "Hostname" \
         3 "Root Password" \
         4 "Init Selection" \
         5 "DE selection" \
-        6 "Install" 3>&1 1>&2 2>&3 3>&-)
+        6 "Wi-Fi Setup (optional)" \
+        7 "Install" 3>&1 1>&2 2>&3 3>&-)
     
     STATUS=$?
     clear
@@ -133,8 +215,39 @@ while true; do
             1 "KDE Plasma" \
             2 "XFCE4" 3>&1 1>&2 2>&3 3>&-); clear
     fi
-   
+
     if [ "$MENU" == "6" ]; then
+        dialog --title "Wi-Fi Setup" --yesno "Do you want to pre-configure a Wi-Fi network?\n\nOn ethernet? Choose No - NetworkManager handles wired connections automatically, no setup needed." 0 0
+        if [ $? -eq 0 ]; then
+            while true; do
+                WIFI_SSID=$(dialog --title "Wi-Fi Setup" --inputbox "Enter the Wi-Fi network name (SSID): " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+                [ -n "$WIFI_SSID" ] && break
+                dialog --title "Error" --msgbox "SSID cannot be empty." 0 0; clear
+            done
+
+            dialog --title "Wi-Fi Setup" --yesno "Is this an open network (no password)?" 0 0
+            if [ $? -eq 0 ]; then
+                WIFI_PASS=""
+            else
+                while true; do
+                    WIFI_PASS=$(dialog --title "Wi-Fi Setup" --insecure --passwordbox "Enter the Wi-Fi password for: $WIFI_SSID" 0 0 3>&1 1>&2 2>&3 3>&-); clear
+                    WIFI_PASS2=$(dialog --title "Wi-Fi Setup" --insecure --passwordbox "Retype the Wi-Fi password: " 0 0 3>&1 1>&2 2>&3 3>&-); clear
+                    if [ -n "$WIFI_PASS" ] && [ "$WIFI_PASS" == "$WIFI_PASS2" ]; then
+                        break
+                    else
+                        dialog --title "Error" --msgbox "Passwords do not match or were left empty. Try again." 0 0; clear
+                    fi
+                done
+            fi
+            dialog --title "Wi-Fi Set!" --msgbox "Wi-Fi network '$WIFI_SSID' will be pre-configured and auto-connect on first boot." 0 0; clear
+        else
+            WIFI_SSID=""
+            WIFI_PASS=""
+            clear
+        fi
+    fi
+   
+    if [ "$MENU" == "7" ]; then
 
         MISSING=""
         [ -z "$USER_" ] && MISSING="${MISSING}\n - User Account"
@@ -178,6 +291,7 @@ while true; do
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
+                    setup_wifi_connection
 
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
@@ -272,6 +386,7 @@ EOF
 
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
+                    setup_wifi_connection
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 # Set DNS (not locked - NetworkManager needs to manage this after install)
@@ -338,15 +453,30 @@ pacman -S \
     dbus dbus-openrc \
     nano sudo \
     --noconfirm
-
-rc-update add dbus default
-rc-update add elogind default
-rc-update add NetworkManager default
-rc-update add turnstile default
-rc-update add sddm default
-rc-update add power-profiles-daemon default
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
+
+                    if [ "$INIT_OK" == "true" ]; then
+                        echo "=== Enabling OpenRC services (self-detecting) ===" >> "$LOGFILE"
+                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+enable_openrc_service() {
+    local pattern="$1"
+    local svc
+    svc=$(find /etc/init.d -maxdepth 1 -iname "$pattern" -print -quit 2>/dev/null)
+    if [ -n "$svc" ]; then
+        rc-update add "$(basename "$svc")" default
+        echo "Enabled OpenRC service: $(basename "$svc")"
+    else
+        echo "WARNING: no OpenRC service matching '$pattern' found under /etc/init.d - skipped" >&2
+    fi
+}
+
+for svc in dbus elogind NetworkManager turnstile sddm power-profiles-daemon; do
+    enable_openrc_service "$svc"
+done
+SVCEOF
+                        [ $? -ne 0 ] && INIT_OK=false
+                    fi
                 fi
                 rm -f "$ARTIX_CONF"
             fi
@@ -384,6 +514,7 @@ EOF
 
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
+                    setup_wifi_connection
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 # Set DNS (not locked - NetworkManager needs to manage this after install)
@@ -454,20 +585,35 @@ pacman -S \
     dbus dbus-runit \
     nano sudo \
     --noconfirm
-
-# Enable services in Runit (ensures NetworkManager + graphical target via SDDM)
-# NOTE: service dir names are case-sensitive - NetworkManager, not networkmanager.
-mkdir -p /etc/runit/runsvdir/default
-
-for svc in dbus elogind NetworkManager turnstiled sddm power-profiles-daemon; do
-    if [ -d "/etc/runit/sv/\$svc" ]; then
-        ln -sf "/etc/runit/sv/\$svc" /etc/runit/runsvdir/default/
-    else
-        echo "WARNING: service dir /etc/runit/sv/\$svc not found, skipping" >&2
-    fi
-done
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
+
+                    if [ "$INIT_OK" == "true" ]; then
+                        echo "=== Enabling runit services (self-detecting) ===" >> "$LOGFILE"
+                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+mkdir -p /etc/runit/runsvdir/default
+
+enable_runit_service() {
+    local pattern="$1"
+    local svdir
+    svdir=$(find /etc/runit/sv -maxdepth 1 -iname "$pattern" -print -quit 2>/dev/null)
+    if [ -n "$svdir" ]; then
+        ln -sf "$svdir" /etc/runit/runsvdir/default/
+        echo "Enabled runit service: $svdir"
+    else
+        echo "WARNING: no runit service directory matching '$pattern' found under /etc/runit/sv - skipped" >&2
+    fi
+}
+
+echo "--- contents of /etc/runit/sv for reference ---"
+ls /etc/runit/sv 2>&1
+
+for svc in dbus elogind NetworkManager turnstiled sddm power-profiles-daemon; do
+    enable_runit_service "$svc"
+done
+SVCEOF
+                        [ $? -ne 0 ] && INIT_OK=false
+                    fi
                 fi
                 rm -f "$ARTIX_CONF"
             fi
