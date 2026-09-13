@@ -23,7 +23,45 @@ fix_keyrings_and_time() {
     echo "=== Synchronizing System Time & Fixing Keyrings ===" >> "$LOGFILE"
     timedatectl set-ntp true 2>/dev/null || true
     pacman-key --init >> "$LOGFILE" 2>&1 || true
-    pacman-key --populate artix archlinux >> "$LOGFILE" 2>&1 || true
+    # NOTE: deliberately NOT populating the artix keyring on the host/live
+    # environment here. pacstrap for openrc/runit uses a custom pacman.conf
+    # with "SigLevel = Optional TrustAll", so signature verification against
+    # the artix keyring is skipped entirely during pacstrap - populating it
+    # on the host achieves nothing but produces a scary, confusing error
+    # ("keyring file ... does not exist") on live media that doesn't already
+    # ship artix-keyring. The actual artix keyring populate that matters
+    # happens later, inside the target chroot, per init branch.
+    pacman-key --populate archlinux >> "$LOGFILE" 2>&1 || true
+}
+
+# Fails fast with a clear message instead of letting the user discover 20
+# cryptic pacman mirror errors deep into the install. Checks raw connectivity
+# (bypasses DNS), then DNS resolution, then clock sanity (a badly-off clock
+# breaks HTTPS certificate validation and looks identical to "no internet").
+network_preflight_check() {
+    local ok=true
+    local msg=""
+
+    if ! curl -s --max-time 5 -o /dev/null https://1.1.1.1; then
+        msg="${msg}\n - No raw network connectivity (couldn't reach 1.1.1.1). Connect Wi-Fi (iwctl) or ethernet (dhcpcd) first."
+        ok=false
+    elif ! curl -s --max-time 5 -o /dev/null https://archlinux.org; then
+        msg="${msg}\n - Network is up but DNS resolution is failing. Check /etc/resolv.conf on this live session."
+        ok=false
+    fi
+
+    local now_year
+    now_year=$(date +%Y)
+    if [ "$now_year" -lt 2024 ]; then
+        msg="${msg}\n - System clock looks wrong (year $now_year). This breaks HTTPS certificate validation and can look exactly like a network failure. Run: timedatectl set-ntp true (or set-time manually)."
+        ok=false
+    fi
+
+    if [ "$ok" == "false" ]; then
+        dialog --title "Network Check Failed" --msgbox "Before installing, fix the following on THIS live session (not the target disk):$msg\n\nThen relaunch the installer." 0 0; clear
+        return 1
+    fi
+    return 0
 }
 
 setup_chroot_dns() {
@@ -138,6 +176,10 @@ refresh_mirrors() {
 > "$LOGFILE"
 
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
+
+if ! network_preflight_check; then
+    exit 1
+fi
 
 while true; do
     MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 17 55 7 \
