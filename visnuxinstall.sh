@@ -370,7 +370,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=linux
+LOGO=tux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
@@ -482,7 +482,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=linux
+LOGO=tux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
@@ -630,7 +630,7 @@ BUILD_ID=rolling
 ANSI_COLOR="38;2;85;255;85"
 HOME_URL="https://visnux.duckdns.org/"
 DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=linux
+LOGO=tux
 OSSEOF
 
 echo "root:$ROOT" | chpasswd
