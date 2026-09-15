@@ -298,6 +298,18 @@ while true; do
                 TIMEZONE="UTC"
             fi
 
+            # Figure out the real disk backing /mnt (root partition's parent device),
+            # instead of assuming /dev/sda. Handles nvme0n1p3, sda1, vda1, mmcblk0p1, etc.
+            ROOT_PART=$(findmnt -no SOURCE /mnt 2>/dev/null)
+            TARGET_DISK=""
+            if [ -n "$ROOT_PART" ]; then
+                PKNAME=$(lsblk -no pkname "$ROOT_PART" 2>/dev/null)
+                [ -n "$PKNAME" ] && TARGET_DISK="/dev/$PKNAME"
+            fi
+            if [ -z "$TARGET_DISK" ]; then
+                echo "WARNING: could not auto-detect the target disk from /mnt (findmnt/lsblk gave nothing usable)." >> "$LOGFILE"
+            fi
+
             INIT_OK=true
             fix_keyrings_and_time
 
@@ -305,7 +317,7 @@ while true; do
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
                 
-                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr sudo >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr os-prober sudo >> "$LOGFILE" 2>&1 || INIT_OK=false
                 
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt > /mnt/etc/fstab
@@ -354,8 +366,26 @@ useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        exit 1
+    fi
+else
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    if [ -z "$TARGET_DISK" ]; then
+        echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
+        exit 1
+    fi
+    grub-install --target=i386-pc "$TARGET_DISK"
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        exit 1
+    fi
+fi
+sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 if [ "$DE" == "1" ]; then
@@ -408,7 +438,7 @@ Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
 Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
@@ -459,8 +489,26 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        exit 1
+    fi
+else
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    if [ -z "$TARGET_DISK" ]; then
+        echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
+        exit 1
+    fi
+    grub-install --target=i386-pc "$TARGET_DISK"
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        exit 1
+    fi
+fi
+sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 DE_PKGS=""
@@ -547,7 +595,7 @@ Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
 Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git >> "$LOGFILE" 2>&1 || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
@@ -602,8 +650,26 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux || grub-install /dev/sda
+if [ -d /sys/firmware/efi/efivars ]; then
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        exit 1
+    fi
+else
+    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+    if [ -z "$TARGET_DISK" ]; then
+        echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
+        exit 1
+    fi
+    grub-install --target=i386-pc "$TARGET_DISK"
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        exit 1
+    fi
+fi
+sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
 DE_PKGS=""
