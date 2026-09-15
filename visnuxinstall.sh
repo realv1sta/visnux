@@ -298,15 +298,23 @@ while true; do
                 TIMEZONE="UTC"
             fi
 
+            # Detect firmware boot mode once, up front.
+            if [ -d /sys/firmware/efi/efivars ]; then
+                BOOT_MODE="uefi"
+            else
+                BOOT_MODE="bios"
+            fi
+
             # Figure out the real disk backing /mnt (root partition's parent device),
             # instead of assuming /dev/sda. Handles nvme0n1p3, sda1, vda1, mmcblk0p1, etc.
+            # Only actually needed for BIOS installs, but we compute it either way.
             ROOT_PART=$(findmnt -no SOURCE /mnt 2>/dev/null)
-            TARGET_DISK=""
+            GRUB_DISK=""
             if [ -n "$ROOT_PART" ]; then
                 PKNAME=$(lsblk -no pkname "$ROOT_PART" 2>/dev/null)
-                [ -n "$PKNAME" ] && TARGET_DISK="/dev/$PKNAME"
+                [ -n "$PKNAME" ] && GRUB_DISK="/dev/$PKNAME"
             fi
-            if [ -z "$TARGET_DISK" ]; then
+            if [ "$BOOT_MODE" == "bios" ] && [ -z "$GRUB_DISK" ]; then
                 echo "WARNING: could not auto-detect the target disk from /mnt (findmnt/lsblk gave nothing usable)." >> "$LOGFILE"
             fi
 
@@ -366,25 +374,27 @@ useradd -m -G wheel "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
-if [ -d /sys/firmware/efi/efivars ]; then
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+if [ "$BOOT_MODE" = "uefi" ]; then
+    pacman -S --noconfirm grub efibootmgr os-prober
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
         echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-    if [ -z "$TARGET_DISK" ]; then
+    if [ -z "$GRUB_DISK" ]; then
         echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
         exit 1
     fi
-    grub-install --target=i386-pc "$TARGET_DISK"
+    pacman -S --noconfirm grub os-prober
+    grub-install --recheck "$GRUB_DISK"
     if [ \$? -ne 0 ]; then
-        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        echo "FATAL: BIOS grub-install to $GRUB_DISK failed." >&2
         exit 1
     fi
 fi
+
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -489,25 +499,27 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-if [ -d /sys/firmware/efi/efivars ]; then
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+if [ "$BOOT_MODE" = "uefi" ]; then
+    pacman -S --noconfirm grub efibootmgr os-prober
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
         echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-    if [ -z "$TARGET_DISK" ]; then
+    if [ -z "$GRUB_DISK" ]; then
         echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
         exit 1
     fi
-    grub-install --target=i386-pc "$TARGET_DISK"
+    pacman -S --noconfirm grub os-prober
+    grub-install --recheck "$GRUB_DISK"
     if [ \$? -ne 0 ]; then
-        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        echo "FATAL: BIOS grub-install to $GRUB_DISK failed." >&2
         exit 1
     fi
 fi
+
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -650,25 +662,27 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 mkinitcpio -P
 
-if [ -d /sys/firmware/efi/efivars ]; then
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+if [ "$BOOT_MODE" = "uefi" ]; then
+    pacman -S --noconfirm grub efibootmgr os-prober
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
         echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
-    sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
-    if [ -z "$TARGET_DISK" ]; then
+    if [ -z "$GRUB_DISK" ]; then
         echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
         exit 1
     fi
-    grub-install --target=i386-pc "$TARGET_DISK"
+    pacman -S --noconfirm grub os-prober
+    grub-install --recheck "$GRUB_DISK"
     if [ \$? -ne 0 ]; then
-        echo "FATAL: BIOS grub-install to $TARGET_DISK failed." >&2
+        echo "FATAL: BIOS grub-install to $GRUB_DISK failed." >&2
         exit 1
     fi
 fi
+
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
