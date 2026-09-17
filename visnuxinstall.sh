@@ -285,6 +285,26 @@ while true; do
             continue
         fi
 
+        # Detect firmware boot mode and where the ESP is actually mounted, up front,
+        # so we can catch a missing/misplaced EFI partition BEFORE the point of no return.
+        if [ -d /sys/firmware/efi/efivars ]; then
+            BOOT_MODE="uefi"
+        else
+            BOOT_MODE="bios"
+        fi
+
+        EFI_DIR=""
+        if mountpoint -q /mnt/boot/efi 2>/dev/null; then
+            EFI_DIR="/boot/efi"
+        elif mountpoint -q /mnt/boot 2>/dev/null; then
+            EFI_DIR="/boot"
+        fi
+
+        if [ "$BOOT_MODE" == "uefi" ] && [ -z "$EFI_DIR" ]; then
+            dialog --title "EFI Partition Not Found" --msgbox "You're on a UEFI system, but no EFI System Partition is mounted at /mnt/boot or /mnt/boot/efi.\n\nMount your FAT32 ESP at one of those paths (e.g. mount /dev/sda1 /mnt/boot/efi) and try again." 0 0; clear
+            continue
+        fi
+
         dialog --title "Warning!" --yesno "If you click confirm, Visnux Linux will install on your disk/partition at /mnt. THIS ACTION CANNOT BE REVERSED!\n\nDo you wish to continue?" 0 0
         
         STATUS=$?
@@ -296,13 +316,6 @@ while true; do
             TIMEZONE=$(curl -s --max-time 5 https://ipinfo.io/timezone)
             if [ -z "$TIMEZONE" ] || [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
                 TIMEZONE="UTC"
-            fi
-
-            # Detect firmware boot mode once, up front.
-            if [ -d /sys/firmware/efi/efivars ]; then
-                BOOT_MODE="uefi"
-            else
-                BOOT_MODE="bios"
             fi
 
             # Figure out the real disk backing /mnt (root partition's parent device),
@@ -376,9 +389,9 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 if [ "$BOOT_MODE" = "uefi" ]; then
     pacman -S --noconfirm grub efibootmgr os-prober
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
-        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        echo "FATAL: UEFI grub-install failed. Check that $EFI_DIR is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
@@ -501,9 +514,9 @@ mkinitcpio -P
 
 if [ "$BOOT_MODE" = "uefi" ]; then
     pacman -S --noconfirm grub efibootmgr os-prober
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
-        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        echo "FATAL: UEFI grub-install failed. Check that $EFI_DIR is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
@@ -664,9 +677,9 @@ mkinitcpio -P
 
 if [ "$BOOT_MODE" = "uefi" ]; then
     pacman -S --noconfirm grub efibootmgr os-prober
-    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=Visnux --removable
+    grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux --removable
     if [ \$? -ne 0 ]; then
-        echo "FATAL: UEFI grub-install failed. Check that /boot is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+        echo "FATAL: UEFI grub-install failed. Check that $EFI_DIR is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
         exit 1
     fi
 else
