@@ -1,0 +1,12 @@
+#!/bin/sh
+
+args=()
+for arg in "$@"; do
+    if [ "$arg" = "-leaf" ]; then
+        args+=("-S")
+    else
+        args+=("$arg")
+    fi
+done
+
+exec /usr/bin/pacman "${args[@]}"
