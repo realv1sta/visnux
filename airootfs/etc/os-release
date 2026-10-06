@@ -1,8 +1,0 @@
-NAME="Visnux"
-PRETTY_NAME="Visnux Linux"
-ID=visnux
-BUILD_ID=rolling
-ANSI_COLOR="38;2;85;255;85"
-HOME_URL="https://visnux.duckdns.org/"
-DOCUMENTATION_URL="https://visnux.duckdns.org/"
-LOGO=linux
