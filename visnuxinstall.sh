@@ -403,6 +403,10 @@ while true; do
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
+                    mkdir -p /mnt/usr/local/bin
+                    cp /usr/local/bin/tree /mnt/usr/local/bin
+                    chmod +x /mnt/usr/local/bin/tree
+
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman -Sy --noconfirm archlinux-keyring || true
 
@@ -578,6 +582,10 @@ EOF
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
                     setup_wifi_connection
+
+                    mkdir -p /mnt/usr/local/bin
+                    cp /usr/local/bin/tree /mnt/usr/local/bin
+                    chmod +x /mnt/usr/local/bin/tree
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
@@ -789,6 +797,10 @@ EOF
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
                     setup_wifi_connection
+
+                    mkdir -p /mnt/usr/local/bin
+                    cp /usr/local/bin/tree /mnt/usr/local/bin
+                    chmod +x /mnt/usr/local/bin/tree
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 rm -f /etc/resolv.conf
