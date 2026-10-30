@@ -219,10 +219,11 @@ while true; do
     fi
    
     if [ "$MENU" == "4" ]; then
-        INIT=$(dialog --title "Init Selection" --menu "Choose your preferred init: " 10 40 3 \
+        INIT=$(dialog --title "Init Selection" --menu "Choose your preferred init: " 11 40 4 \
             1 "systemd" \
             2 "openrc" \
-            3 "runit" 3>&1 1>&2 2>&3 3>&-); clear
+            3 "runit" \
+            4 "dinit" 3>&1 1>&2 2>&3 3>&-); clear
 
         if [ -n "$INIT" ]; then
             dialog --title "Mirrors" --infobox "Finding fast mirrors for your location, hang on..." 0 0
@@ -403,10 +404,6 @@ while true; do
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
-                    mkdir -p /mnt/usr/local/bin
-                    cp /usr/local/bin/tree /mnt/usr/local/bin
-                    chmod +x /mnt/usr/local/bin/tree
-
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 pacman -Sy --noconfirm archlinux-keyring || true
 
@@ -548,28 +545,28 @@ DatabaseOptional
 SigLevel = Optional TrustAll
 
 [system]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 
 [world]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 
 [galaxy]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
@@ -582,10 +579,6 @@ EOF
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
                     setup_wifi_connection
-
-                    mkdir -p /mnt/usr/local/bin
-                    cp /usr/local/bin/tree /mnt/usr/local/bin
-                    chmod +x /mnt/usr/local/bin/tree
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
@@ -763,28 +756,28 @@ DatabaseOptional
 SigLevel = Optional TrustAll
 
 [system]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 
 [world]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 
 [galaxy]
-Server = https://eu-mirror.artixlinux.org/repos/\$repo/os/\$arch
-Server = https://quantum-mirror.hu/mirrors/pub/artix-linux/\$repo/os/\$arch
-Server = https://mirror.netcologne.de/artix-linux/\$repo/os/\$arch
 Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
-Server = https://us-mirror.artixlinux.org/\$repo/os/\$arch
-Server = https://mirror.clarkson.edu/artix-linux/repos/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
@@ -797,10 +790,6 @@ EOF
                     genfstab -U /mnt > /mnt/etc/fstab
                     setup_chroot_dns
                     setup_wifi_connection
-
-                    mkdir -p /mnt/usr/local/bin
-                    cp /usr/local/bin/tree /mnt/usr/local/bin
-                    chmod +x /mnt/usr/local/bin/tree
 
                     arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
 rm -f /etc/resolv.conf
@@ -965,6 +954,225 @@ ls /etc/runit/sv 2>&1
 
 for svc in dbus elogind NetworkManager sddm power-profiles-daemon; do
     enable_runit_service "$svc"
+done
+SVCEOF
+                        [ $? -ne 0 ] && INIT_OK=false
+                    fi
+                fi
+                rm -f "$ARTIX_CONF"
+            fi
+
+#dinit
+            if [ "$INIT" == "4" ]; then
+                ARTIX_CONF="/tmp/visnux-artix.conf"
+                cat > "$ARTIX_CONF" <<EOF
+[options]
+Architecture = auto
+ParallelDownloads = 12
+Color
+CheckSpace
+DatabaseOptional
+SigLevel = Optional TrustAll
+
+[system]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
+
+[world]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
+
+[galaxy]
+Server = https://mirrors.rit.edu/artixlinux/\$repo/os/\$arch
+Server = https://ftp.crifo.org/artix/repos/\$repo/os/\$arch
+Server = https://mirrors.dotsrc.org/artix-linux/repos/\$repo/os/\$arch
+Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
+Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
+Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
+EOF
+
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel dinit elogind-dinit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
+
+                if [ "$INIT_OK" == "true" ]; then
+                    cp "$ARTIX_CONF" /mnt/etc/pacman.conf
+                    sed -i '/^DatabaseOptional/d' /mnt/etc/pacman.conf
+                    grep -q '^ILoveCandy' /mnt/etc/pacman.conf || sed -i '/^Color/a ILoveCandy' /mnt/etc/pacman.conf
+
+                    genfstab -U /mnt > /mnt/etc/fstab
+                    setup_chroot_dns
+                    setup_wifi_connection
+
+                    arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+rm -f /etc/resolv.conf
+cat <<RESOLVEOF > /etc/resolv.conf
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+RESOLVEOF
+
+pacman-key --init
+pacman-key --populate artix archlinux
+pacman -Sy --noconfirm artix-mirrorlist artix-keyring archlinux-keyring artix-archlinux-support || true
+
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "$HOST" > /etc/hostname
+
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+hwclock --systohc
+
+cat <<HOSTSEOF > /etc/hosts
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $HOST.localdomain $HOST
+HOSTSEOF
+
+cat <<OSSEOF > /etc/os-release
+NAME="Visnux"
+PRETTY_NAME="Visnux Linux"
+ID=visnux
+BUILD_ID=rolling
+ANSI_COLOR="38;2;85;255;85"
+HOME_URL="https://github.com/realv1sta/visnux"
+DOCUMENTATION_URL="https://github.com/realv1sta/visnux"
+LOGO=visnux
+OSSEOF
+
+mkdir -p /etc/skel/.config
+mkdir -p /usr/share/icons/hicolor/scalable/apps
+mkdir -p /usr/share/pixmaps
+
+pacman -S --noconfirm --overwrite="*" git || true
+
+if git clone https://github.com/beamyyl/fastfetch /tmp/fastfetch-skel; then
+    cp -r /tmp/fastfetch-skel/* /etc/skel/.config/ 2>/dev/null || true
+    rm -rf /tmp/fastfetch-skel
+else
+    echo "WARNING: could not clone beamyyl/fastfetch, /etc/skel/.config/fastfetch not seeded" >&2
+fi
+mkdir -p /etc/skel/.config/fastfetch
+
+if git clone https://github.com/beamyyl/kitty /tmp/kitty-skel; then
+    cp -r /tmp/kitty-skel/* /etc/skel/.config/ 2>/dev/null || true
+    rm -rf /tmp/kitty-skel
+else
+    echo "WARNING: could not clone beamyyl/kitty, /etc/skel/.config/kitty not seeded" >&2
+fi
+
+if git clone https://github.com/realv1sta/visnux.git /tmp/visnux-assets; then
+    [ -f /tmp/visnux-assets/visnux.svg ] && cp /tmp/visnux-assets/visnux.svg /usr/share/icons/hicolor/scalable/apps/visnux.svg
+    [ -f /tmp/visnux-assets/visnux.png ] && cp /tmp/visnux-assets/visnux.png /usr/share/pixmaps/visnux.png
+    if [ -f /tmp/visnux-assets/colorlogo.sh ]; then
+        chmod +x /tmp/visnux-assets/colorlogo.sh
+        (cd /tmp/visnux-assets && ./colorlogo.sh > /etc/skel/.config/fastfetch/logo.txt) || echo "WARNING: colorlogo.sh failed, keeping empty logo.txt" >&2
+    else
+        echo "WARNING: colorlogo.sh not found in visnux repo, keeping logo.txt empty" >&2
+    fi
+    rm -rf /tmp/visnux-assets
+else
+    echo "WARNING: could not clone visnux repo, icons/logo not installed" >&2
+fi
+
+echo "root:$ROOT" | chpasswd
+useradd -m -G wheel "$USER_"
+echo "$USER_:$PASSWORD" | chpasswd
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+mkinitcpio -P
+
+if [ "$BOOT_MODE" = "uefi" ]; then
+    pacman -S --noconfirm --overwrite="*" grub efibootmgr os-prober
+    if [ "$UEFI_NVRAM_OK" = "true" ]; then
+        grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux
+        if [ \$? -ne 0 ]; then
+            echo "WARNING: grub-install with NVRAM registration failed, retrying with --removable (no firmware boot entry will be created)." >&2
+            grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux --removable
+            if [ \$? -ne 0 ]; then
+                echo "FATAL: UEFI grub-install failed even with --removable. Check that $EFI_DIR is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+                exit 1
+            fi
+        fi
+    else
+        grub-install --target=x86_64-efi --efi-directory="$EFI_DIR" --bootloader-id=Visnux --removable
+        if [ \$? -ne 0 ]; then
+            echo "FATAL: UEFI grub-install failed. Check that $EFI_DIR is your mounted ESP (vfat filesystem, esp/boot partition flag set)." >&2
+            exit 1
+        fi
+    fi
+
+    mkdir -p "$EFI_DIR/EFI/BOOT"
+    if [ -f "$EFI_DIR/EFI/Visnux/grubx64.efi" ]; then
+        cp -f "$EFI_DIR/EFI/Visnux/grubx64.efi" "$EFI_DIR/EFI/BOOT/BOOTX64.EFI" || true
+    fi
+else
+    if [ -z "$GRUB_DISK" ]; then
+        echo "FATAL: could not determine the target disk for BIOS grub-install (findmnt/lsblk gave nothing usable - no /dev/sda assumption made). See log for details." >&2
+        exit 1
+    fi
+    pacman -S --noconfirm --overwrite="*" grub os-prober
+    grub-install --recheck "$GRUB_DISK"
+    if [ \$? -ne 0 ]; then
+        echo "FATAL: BIOS grub-install to $GRUB_DISK failed." >&2
+        exit 1
+    fi
+fi
+
+sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="Visnux"' >> /etc/default/grub
+sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
+grub-mkconfig -o /boot/grub/grub.cfg
+
+DE_PKGS=""
+DESKTOP_PKGS=""
+
+if [ "$DE" == "1" ]; then
+    DE_PKGS="plasma konsole dolphin"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber"
+elif [ "$DE" == "2" ]; then
+    DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber"
+fi
+
+pacman -S \
+    \$DE_PKGS \
+    \$DESKTOP_PKGS \
+    networkmanager networkmanager-dinit \
+    dbus dbus-dinit \
+    nano sudo \
+    --overwrite="*" --noconfirm
+EOF
+                    [ $? -ne 0 ] && INIT_OK=false
+
+                    if [ "$INIT_OK" == "true" ]; then
+                        echo "=== Enabling dinit services (self-detecting) ===" >> "$LOGFILE"
+                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+mkdir -p /etc/dinit.d/boot.d
+
+enable_dinit_service() {
+    local pattern="$1"
+    local svc
+    svc=$(find /etc/dinit.d -maxdepth 1 -iname "$pattern" -print -quit 2>/dev/null)
+    if [ -n "$svc" ]; then
+        ln -sf "../$(basename "$svc")" "/etc/dinit.d/boot.d/$(basename "$svc")"
+        echo "Enabled dinit service: $(basename "$svc")"
+    else
+        echo "WARNING: no dinit service matching '$pattern' found under /etc/dinit.d - skipped" >&2
+    fi
+}
+
+echo "--- contents of /etc/dinit.d for reference ---"
+ls /etc/dinit.d 2>&1
+
+for svc in dbus elogind logind NetworkManager sddm power-profiles-daemon; do
+    enable_dinit_service "$svc"
 done
 SVCEOF
                         [ $? -ne 0 ] && INIT_OK=false
