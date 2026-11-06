@@ -1,5 +1,6 @@
 #!/bin/bash
 set -u
+set -o pipefail
 
 USER_=""
 PASSWORD=""
@@ -23,8 +24,8 @@ show_error_log() {
 fix_keyrings_and_time() {
     echo "=== Synchronizing System Time & Fixing Keyrings ===" >> "$LOGFILE"
     timedatectl set-ntp true 2>/dev/null || true
-    pacman-key --init >> "$LOGFILE" 2>&1 || true
-    pacman-key --populate archlinux >> "$LOGFILE" 2>&1 || true
+    pacman-key --init 2>&1 | tee -a "$LOGFILE" || true
+    pacman-key --populate archlinux 2>&1 | tee -a "$LOGFILE" || true
 }
 
 
@@ -388,13 +389,14 @@ while true; do
             fi
 
             INIT_OK=true
+            echo "=== Installing Visnux - this takes a while, please do not close this window ==="
             fix_keyrings_and_time
 
 #systemd
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
                 
-                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr os-prober sudo --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware grub efibootmgr os-prober sudo --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
                 
                 if [ "$INIT_OK" == "true" ]; then
                     genfstab -U /mnt > /mnt/etc/fstab
@@ -404,7 +406,7 @@ while true; do
                     sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /mnt/etc/pacman.conf
                     sed -i '/^ParallelDownloads = 12/a Color\nILoveCandy' /mnt/etc/pacman.conf
 
-                    arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+                    arch-chroot /mnt /bin/bash 2>&1 <<EOF | tee -a "$LOGFILE"
 pacman -Sy --noconfirm archlinux-keyring || true
 
 
@@ -569,7 +571,7 @@ Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware grub efibootmgr pipewire pipewire-pulse wireplumber os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
@@ -580,7 +582,7 @@ EOF
                     setup_chroot_dns
                     setup_wifi_connection
 
-                    arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+                    arch-chroot /mnt /bin/bash 2>&1 <<EOF | tee -a "$LOGFILE"
 echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
 
 pacman-key --init
@@ -696,15 +698,38 @@ sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub |
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
+mkdir -p /usr/local/bin /etc/xdg/autostart
+
+cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
+#!/bin/sh
+[ -n "\$XDG_RUNTIME_DIR" ] || exit 0
+pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+AUDIOEOF
+chmod +x /usr/local/bin/visnux-audio-start
+
+cat <<'AUDIODESKEOF' > /etc/xdg/autostart/visnux-audio.desktop
+[Desktop Entry]
+Type=Application
+Name=Visnux Audio
+Comment=Starts PipeWire, WirePlumber and PipeWire-Pulse
+Exec=/usr/local/bin/visnux-audio-start
+Terminal=false
+NoDisplay=true
+AUDIODESKEOF
+
 DE_PKGS=""
 DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils pavucontrol"
 fi
 
 pacman -S \
@@ -720,7 +745,7 @@ EOF
 
                     if [ "$INIT_OK" == "true" ]; then
                         echo "=== Enabling OpenRC services (self-detecting) ===" >> "$LOGFILE"
-                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+                        arch-chroot /mnt /bin/bash 2>&1 <<'SVCEOF' | tee -a "$LOGFILE"
 enable_openrc_service() {
     local pattern="$1"
     local svc
@@ -780,7 +805,7 @@ Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
@@ -791,7 +816,7 @@ EOF
                     setup_chroot_dns
                     setup_wifi_connection
 
-                    arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+                    arch-chroot /mnt /bin/bash 2>&1 <<EOF | tee -a "$LOGFILE"
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
@@ -911,15 +936,38 @@ sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub |
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
+mkdir -p /usr/local/bin /etc/xdg/autostart
+
+cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
+#!/bin/sh
+[ -n "\$XDG_RUNTIME_DIR" ] || exit 0
+pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+AUDIOEOF
+chmod +x /usr/local/bin/visnux-audio-start
+
+cat <<'AUDIODESKEOF' > /etc/xdg/autostart/visnux-audio.desktop
+[Desktop Entry]
+Type=Application
+Name=Visnux Audio
+Comment=Starts PipeWire, WirePlumber and PipeWire-Pulse
+Exec=/usr/local/bin/visnux-audio-start
+Terminal=false
+NoDisplay=true
+AUDIODESKEOF
+
 DE_PKGS=""
 DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils pavucontrol"
 fi
 
 pacman -S \
@@ -934,7 +982,7 @@ EOF
 
                     if [ "$INIT_OK" == "true" ]; then
                         echo "=== Enabling runit services (self-detecting) ===" >> "$LOGFILE"
-                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+                        arch-chroot /mnt /bin/bash 2>&1 <<'SVCEOF' | tee -a "$LOGFILE"
 mkdir -p /etc/runit/runsvdir/default
 
 enable_runit_service() {
@@ -999,7 +1047,7 @@ Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
 
-                pacstrap -C "$ARTIX_CONF" /mnt base base-devel dinit elogind-dinit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" >> "$LOGFILE" 2>&1 || INIT_OK=false
+                pacstrap -C "$ARTIX_CONF" /mnt base base-devel dinit elogind-dinit linux linux-firmware sof-firmware grub efibootmgr os-prober artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
                 if [ "$INIT_OK" == "true" ]; then
                     cp "$ARTIX_CONF" /mnt/etc/pacman.conf
@@ -1010,7 +1058,7 @@ EOF
                     setup_chroot_dns
                     setup_wifi_connection
 
-                    arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<EOF
+                    arch-chroot /mnt /bin/bash 2>&1 <<EOF | tee -a "$LOGFILE"
 rm -f /etc/resolv.conf
 cat <<RESOLVEOF > /etc/resolv.conf
 nameserver 1.1.1.1
@@ -1130,15 +1178,38 @@ sed -i 's/^#*GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Visnux"/' /etc/default/grub |
 sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
+mkdir -p /usr/local/bin /etc/xdg/autostart
+
+cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
+#!/bin/sh
+[ -n "\$XDG_RUNTIME_DIR" ] || exit 0
+pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+sleep 1
+pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+AUDIOEOF
+chmod +x /usr/local/bin/visnux-audio-start
+
+cat <<'AUDIODESKEOF' > /etc/xdg/autostart/visnux-audio.desktop
+[Desktop Entry]
+Type=Application
+Name=Visnux Audio
+Comment=Starts PipeWire, WirePlumber and PipeWire-Pulse
+Exec=/usr/local/bin/visnux-audio-start
+Terminal=false
+NoDisplay=true
+AUDIODESKEOF
+
 DE_PKGS=""
 DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils pavucontrol"
 fi
 
 pacman -S \
@@ -1153,7 +1224,7 @@ EOF
 
                     if [ "$INIT_OK" == "true" ]; then
                         echo "=== Enabling dinit services (self-detecting) ===" >> "$LOGFILE"
-                        arch-chroot /mnt /bin/bash >> "$LOGFILE" 2>&1 <<'SVCEOF'
+                        arch-chroot /mnt /bin/bash 2>&1 <<'SVCEOF' | tee -a "$LOGFILE"
 mkdir -p /etc/dinit.d/boot.d
 
 enable_dinit_service() {
