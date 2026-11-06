@@ -703,11 +703,24 @@ mkdir -p /usr/local/bin /etc/xdg/autostart
 cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
 #!/bin/sh
 [ -n "\$XDG_RUNTIME_DIR" ] || exit 0
-pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+LOG="\$HOME/.visnux-audio.log"
+UIDN="\$(id -u)"
+has_card() { grep -q '[0-9]' /proc/asound/cards 2>/dev/null; }
+i=0
+while [ "\$i" -lt 30 ] && ! has_card; do sleep 1; i=\$((i+1)); done
+echo "--- visnux-audio-start \$(date) cards-ready=\$(has_card && echo yes || echo no) ---" >> "\$LOG"
+pgrep -u "\$UIDN" -x pipewire >/dev/null 2>&1 || pipewire >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x wireplumber >/dev/null 2>&1 || wireplumber >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >> "\$LOG" 2>&1 &
+sleep 4
+if has_card && ! pactl list short sinks 2>/dev/null | grep -qv auto_null; then
+    echo "no real sink found, restarting wireplumber" >> "\$LOG"
+    pkill -u "\$UIDN" -x wireplumber
+    sleep 1
+    wireplumber >> "\$LOG" 2>&1 &
+fi
 AUDIOEOF
 chmod +x /usr/local/bin/visnux-audio-start
 
@@ -941,11 +954,24 @@ mkdir -p /usr/local/bin /etc/xdg/autostart
 cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
 #!/bin/sh
 [ -n "\$XDG_RUNTIME_DIR" ] || exit 0
-pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+LOG="\$HOME/.visnux-audio.log"
+UIDN="\$(id -u)"
+has_card() { grep -q '[0-9]' /proc/asound/cards 2>/dev/null; }
+i=0
+while [ "\$i" -lt 30 ] && ! has_card; do sleep 1; i=\$((i+1)); done
+echo "--- visnux-audio-start \$(date) cards-ready=\$(has_card && echo yes || echo no) ---" >> "\$LOG"
+pgrep -u "\$UIDN" -x pipewire >/dev/null 2>&1 || pipewire >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x wireplumber >/dev/null 2>&1 || wireplumber >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >> "\$LOG" 2>&1 &
+sleep 4
+if has_card && ! pactl list short sinks 2>/dev/null | grep -qv auto_null; then
+    echo "no real sink found, restarting wireplumber" >> "\$LOG"
+    pkill -u "\$UIDN" -x wireplumber
+    sleep 1
+    wireplumber >> "\$LOG" 2>&1 &
+fi
 AUDIOEOF
 chmod +x /usr/local/bin/visnux-audio-start
 
@@ -1183,11 +1209,24 @@ mkdir -p /usr/local/bin /etc/xdg/autostart
 cat <<'AUDIOEOF' > /usr/local/bin/visnux-audio-start
 #!/bin/sh
 [ -n "\$XDG_RUNTIME_DIR" ] || exit 0
-pgrep -u "\$(id -u)" -x pipewire >/dev/null 2>&1 || pipewire >/dev/null 2>&1 &
+LOG="\$HOME/.visnux-audio.log"
+UIDN="\$(id -u)"
+has_card() { grep -q '[0-9]' /proc/asound/cards 2>/dev/null; }
+i=0
+while [ "\$i" -lt 30 ] && ! has_card; do sleep 1; i=\$((i+1)); done
+echo "--- visnux-audio-start \$(date) cards-ready=\$(has_card && echo yes || echo no) ---" >> "\$LOG"
+pgrep -u "\$UIDN" -x pipewire >/dev/null 2>&1 || pipewire >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x wireplumber >/dev/null 2>&1 || wireplumber >> "\$LOG" 2>&1 &
 sleep 1
-pgrep -u "\$(id -u)" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >/dev/null 2>&1 &
+pgrep -u "\$UIDN" -x pipewire-pulse >/dev/null 2>&1 || pipewire-pulse >> "\$LOG" 2>&1 &
+sleep 4
+if has_card && ! pactl list short sinks 2>/dev/null | grep -qv auto_null; then
+    echo "no real sink found, restarting wireplumber" >> "\$LOG"
+    pkill -u "\$UIDN" -x wireplumber
+    sleep 1
+    wireplumber >> "\$LOG" 2>&1 &
+fi
 AUDIOEOF
 chmod +x /usr/local/bin/visnux-audio-start
 
