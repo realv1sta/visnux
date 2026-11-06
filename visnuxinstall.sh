@@ -389,7 +389,7 @@ while true; do
             fi
 
             INIT_OK=true
-            echo "=== Installing Visnux - this takes a while, please do not close this window ==="
+            echo "=== Installing Visnux - be a tree. ==="
             fix_keyrings_and_time
 
 #systemd
