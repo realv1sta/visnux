@@ -389,7 +389,7 @@ while true; do
             fi
 
             INIT_OK=true
-            echo "=== Installing Visnux - be a tree. ==="
+            echo "=== Installing Visnux - this takes a while, please do not close this window ==="
             fix_keyrings_and_time
 
 #systemd
@@ -651,7 +651,7 @@ else
 fi
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel "$USER_"
+useradd -m -G wheel,audio,video "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -726,10 +726,10 @@ DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils alsa-utils-openrc"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils pavucontrol"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-openrc power-profiles-daemon power-profiles-daemon-openrc pipewire pipewire-openrc pipewire-pulse pipewire-pulse-openrc wireplumber wireplumber-openrc pipewire-alsa alsa-utils alsa-utils-openrc pavucontrol"
 fi
 
 pacman -S \
@@ -758,7 +758,7 @@ enable_openrc_service() {
     fi
 }
 
-for svc in dbus elogind NetworkManager turnstile sddm power-profiles-daemon; do
+for svc in dbus elogind NetworkManager turnstile sddm power-profiles-daemon "alsa*"; do
     enable_openrc_service "$svc"
 done
 SVCEOF
@@ -889,7 +889,7 @@ else
 fi
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel "$USER_"
+useradd -m -G wheel,audio,video "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -964,10 +964,10 @@ DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils alsa-utils-runit"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils pavucontrol"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-runit power-profiles-daemon power-profiles-daemon-runit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils alsa-utils-runit pavucontrol"
 fi
 
 pacman -S \
@@ -1000,7 +1000,7 @@ enable_runit_service() {
 echo "--- contents of /etc/runit/sv for reference ---"
 ls /etc/runit/sv 2>&1
 
-for svc in dbus elogind NetworkManager sddm power-profiles-daemon; do
+for svc in dbus elogind NetworkManager sddm power-profiles-daemon "alsa*"; do
     enable_runit_service "$svc"
 done
 SVCEOF
@@ -1131,7 +1131,7 @@ else
 fi
 
 echo "root:$ROOT" | chpasswd
-useradd -m -G wheel "$USER_"
+useradd -m -G wheel,audio,video "$USER_"
 echo "$USER_:$PASSWORD" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
@@ -1206,10 +1206,10 @@ DESKTOP_PKGS=""
 
 if [ "$DE" == "1" ]; then
     DE_PKGS="plasma konsole dolphin"
-    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils"
+    DESKTOP_PKGS="kitty fastfetch wl-clipboard sddm sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils alsa-utils-dinit"
 elif [ "$DE" == "2" ]; then
     DE_PKGS="xorg-server xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin"
-    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils pavucontrol"
+    DESKTOP_PKGS="kitty fastfetch sddm xclip maim sddm-dinit power-profiles-daemon power-profiles-daemon-dinit pipewire pipewire-pulse wireplumber pipewire-alsa alsa-utils alsa-utils-dinit pavucontrol"
 fi
 
 pacman -S \
@@ -1242,7 +1242,7 @@ enable_dinit_service() {
 echo "--- contents of /etc/dinit.d for reference ---"
 ls /etc/dinit.d 2>&1
 
-for svc in dbus elogind logind NetworkManager sddm power-profiles-daemon; do
+for svc in dbus elogind logind NetworkManager sddm power-profiles-daemon "alsa*"; do
     enable_dinit_service "$svc"
 done
 SVCEOF
