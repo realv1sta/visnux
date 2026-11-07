@@ -11,6 +11,9 @@ DE=""
 WIFI_SSID=""
 WIFI_PASS=""
 BOOTMODE_CHOICE=""
+GPU_CHOICE=""
+GPU_PKGS=""
+GPU_LABEL=""
 LOGFILE="/tmp/visnux_install.log"
 
 check_mount() {
@@ -152,6 +155,77 @@ refresh_mirrors() {
     pacman -Syy --noconfirm archlinux-keyring artix-keyring >> "$LOGFILE" 2>&1 || true
 }
 
+detect_gpus() {
+    GPU_AMD=false
+    GPU_INTEL=false
+    GPU_NV_OPEN=false
+    GPU_NV_OLD=false
+    local dev class vendor id
+    for dev in /sys/bus/pci/devices/*; do
+        [ -r "$dev/class" ] || continue
+        class=$(cat "$dev/class" 2>/dev/null)
+        case "$class" in
+            0x03*) ;;
+            *) continue ;;
+        esac
+        vendor=$(cat "$dev/vendor" 2>/dev/null)
+        id=$(cat "$dev/device" 2>/dev/null)
+        case "$vendor" in
+            0x1002) GPU_AMD=true ;;
+            0x8086) GPU_INTEL=true ;;
+            0x10de)
+                if [ $((${id:-0x0})) -ge $((0x1e00)) ]; then
+                    GPU_NV_OPEN=true
+                else
+                    GPU_NV_OLD=true
+                fi
+                ;;
+        esac
+    done
+}
+
+resolve_gpu_packages() {
+    local list=""
+    local names=""
+    GPU_LABEL=""
+    case "$GPU_CHOICE" in
+        amd)
+            list="mesa vulkan-radeon"
+            GPU_LABEL="AMD (Mesa + Vulkan)"
+            ;;
+        intel)
+            list="mesa vulkan-intel intel-media-driver"
+            GPU_LABEL="Intel (Mesa + Vulkan + VA-API)"
+            ;;
+        nvidia)
+            list="nvidia-open nvidia-utils nvidia-settings"
+            GPU_LABEL="NVIDIA GTX 16xx / RTX or newer (nvidia-open)"
+            ;;
+        nouveau)
+            list="mesa vulkan-nouveau"
+            GPU_LABEL="NVIDIA older cards (open-source Nouveau)"
+            ;;
+        none)
+            list="mesa"
+            GPU_LABEL="Generic / VM (Mesa only)"
+            ;;
+        *)
+            detect_gpus
+            if [ "$GPU_AMD" == "true" ]; then list="$list mesa vulkan-radeon"; names="$names AMD"; fi
+            if [ "$GPU_INTEL" == "true" ]; then list="$list mesa vulkan-intel intel-media-driver"; names="$names Intel"; fi
+            if [ "$GPU_NV_OPEN" == "true" ]; then list="$list nvidia-open nvidia-utils nvidia-settings"; names="$names NVIDIA(nvidia-open)"; fi
+            if [ "$GPU_NV_OLD" == "true" ]; then list="$list mesa vulkan-nouveau"; names="$names NVIDIA(Nouveau)"; fi
+            if [ -z "$list" ]; then
+                list="mesa"
+                names=" no known GPU found (VM?) - Mesa only"
+            fi
+            GPU_LABEL="Auto-detected:$names"
+            ;;
+    esac
+    GPU_PKGS=$(echo $list | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    GPU_PKGS=${GPU_PKGS% }
+}
+
 > "$LOGFILE"
 
 dialog --title "Visnux Linux" --msgbox "Welcome to Visnux Linux! Before running the installer, partition your drives. Because we do NOT make your drives, do em yourself\n\n With love,\n v1sta_" 0 0; clear
@@ -161,7 +235,7 @@ if ! network_preflight_check; then
 fi
 
 while true; do
-    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 20 55 8 \
+    MENU=$(dialog --title "Installation Menu" --menu "Choose an option" 21 55 9 \
         1 "User Account" \
         2 "Hostname" \
         3 "Root Password" \
@@ -169,7 +243,8 @@ while true; do
         5 "DE selection" \
         6 "Wi-Fi Setup (optional)" \
         7 "Boot Mode" \
-        8 "Install" 3>&1 1>&2 2>&3 3>&-)
+        8 "GPU Drivers" \
+        9 "Install" 3>&1 1>&2 2>&3 3>&-)
     
     STATUS=$?
     clear
@@ -291,6 +366,30 @@ while true; do
     fi
 
     if [ "$MENU" == "8" ]; then
+        CHOICE=$(dialog --title "GPU Drivers" --menu "Choose your GPU driver setup:" 15 70 6 \
+            1 "Auto-detect (recommended)" \
+            2 "AMD Drivers" \
+            3 "Intel Drivers" \
+            4 "NVIDIA GTX/RTX or newer (nvidia-open)" \
+            5 "NVIDIA older cards (open-source Nouveau)" \
+            6 "Skip / VM (Mesa only)" 3>&1 1>&2 2>&3 3>&-); clear
+
+        case "$CHOICE" in
+            1) GPU_CHOICE="" ;;
+            2) GPU_CHOICE="amd" ;;
+            3) GPU_CHOICE="intel" ;;
+            4) GPU_CHOICE="nvidia" ;;
+            5) GPU_CHOICE="nouveau" ;;
+            6) GPU_CHOICE="none" ;;
+        esac
+
+        if [ -n "$CHOICE" ]; then
+            resolve_gpu_packages
+            dialog --title "GPU Drivers Set" --msgbox "$GPU_LABEL\n\nPackages: $GPU_PKGS" 0 0; clear
+        fi
+    fi
+
+    if [ "$MENU" == "9" ]; then
 
         MISSING=""
         [ -z "$USER_" ] && MISSING="${MISSING}\n - User Account"
@@ -388,6 +487,7 @@ while true; do
                 echo "WARNING: could not auto-detect the target disk from /mnt (findmnt/lsblk gave nothing usable)." >> "$LOGFILE"
             fi
 
+            resolve_gpu_packages
             INIT_OK=true
             echo "=== Installing Visnux - be a tree <3 ==="
             fix_keyrings_and_time
@@ -525,6 +625,13 @@ if [ "$DE" == "1" ]; then
     pacman -S plasma konsole dolphin wl-clipboard kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --overwrite="*" --noconfirm
 elif [ "$DE" == "2" ]; then
     pacman -S xorg-server xfce4 xfce4-whiskermenu-plugin xclip maim xfce4-pulseaudio-plugin kitty fastfetch sddm networkmanager nano sudo power-profiles-daemon --overwrite="*" --noconfirm
+fi
+
+if [ -n "$GPU_PKGS" ]; then
+    pacman -S --noconfirm --needed --overwrite="*" $GPU_PKGS || echo "WARNING: GPU driver install failed ($GPU_PKGS), continuing without it." >&2
+    case " $GPU_PKGS " in
+        *" nvidia-open "*) mkinitcpio -P ;;
+    esac
 fi
 
 systemctl enable NetworkManager
@@ -753,6 +860,13 @@ pacman -S \
     dbus dbus-openrc \
     nano sudo \
     --overwrite="*" --noconfirm
+
+if [ -n "$GPU_PKGS" ]; then
+    pacman -S --noconfirm --needed --overwrite="*" $GPU_PKGS || echo "WARNING: GPU driver install failed ($GPU_PKGS), continuing without it." >&2
+    case " $GPU_PKGS " in
+        *" nvidia-open "*) mkinitcpio -P ;;
+    esac
+fi
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
 
@@ -1003,6 +1117,13 @@ pacman -S \
     dbus dbus-runit \
     nano sudo \
     --overwrite="*" --noconfirm
+
+if [ -n "$GPU_PKGS" ]; then
+    pacman -S --noconfirm --needed --overwrite="*" $GPU_PKGS || echo "WARNING: GPU driver install failed ($GPU_PKGS), continuing without it." >&2
+    case " $GPU_PKGS " in
+        *" nvidia-open "*) mkinitcpio -P ;;
+    esac
+fi
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
 
@@ -1258,6 +1379,13 @@ pacman -S \
     dbus dbus-dinit \
     nano sudo \
     --overwrite="*" --noconfirm
+
+if [ -n "$GPU_PKGS" ]; then
+    pacman -S --noconfirm --needed --overwrite="*" $GPU_PKGS || echo "WARNING: GPU driver install failed ($GPU_PKGS), continuing without it." >&2
+    case " $GPU_PKGS " in
+        *" nvidia-open "*) mkinitcpio -P ;;
+    esac
+fi
 EOF
                     [ $? -ne 0 ] && INIT_OK=false
 
