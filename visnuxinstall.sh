@@ -160,7 +160,47 @@ refresh_mirrors() {
 
     pacman -Syy --noconfirm >> "$LOGFILE" 2>&1 || true
     pacman -S --noconfirm --needed archlinux-keyring >> "$LOGFILE" 2>&1 || true
-    pacman -S --noconfirm --needed artix-keyring >> "$LOGFILE" 2>&1 || true
+    if pacman -Si artix-keyring >/dev/null 2>&1; then
+        pacman -S --noconfirm --needed artix-keyring >> "$LOGFILE" 2>&1 || true
+    fi
+}
+
+bootstrap_keyring() {
+    local name="$1"
+    local conf="$2"
+    local populate="$3"
+    local fallback="${4:-}"
+    local kr_db=/tmp/keyring-db
+    local kr_cache=/tmp/keyring-cache
+    local kr_conf=/tmp/keyring.conf
+    local pkg=""
+    local src
+
+    echo "=== Fetching the current $name ===" | tee -a "$LOGFILE"
+    rm -rf "$kr_db" "$kr_cache" "$kr_conf"
+    mkdir -p "$kr_db/local" "$kr_cache"
+
+    for src in "$conf" $fallback; do
+        [ -n "$pkg" ] && break
+        [ -r "$src" ] || continue
+        sed 's/^SigLevel.*/SigLevel = Never/' "$src" > "$kr_conf"
+        pacman --config "$kr_conf" --dbpath "$kr_db" --cachedir "$kr_cache" -Syw --noconfirm "$name" 2>&1 | tee -a "$LOGFILE" || true
+        pkg=$(ls -1t "$kr_cache"/"$name"-[0-9]*.pkg.tar.* 2>/dev/null | grep -v '\.sig$' | head -n 1)
+    done
+
+    if [ -z "$pkg" ]; then
+        echo "WARNING: could not download the current $name, continuing with the keys already on this system." | tee -a "$LOGFILE"
+        rm -rf "$kr_db" "$kr_cache" "$kr_conf"
+        return 0
+    fi
+
+    if ! pacman -U --noconfirm "$pkg" 2>&1 | tee -a "$LOGFILE"; then
+        echo "WARNING: pacman -U failed for $pkg, extracting the keyring files directly." | tee -a "$LOGFILE"
+        bsdtar -xf "$pkg" -C / usr/share/pacman/keyrings 2>&1 | tee -a "$LOGFILE" || true
+    fi
+
+    pacman-key --populate "$populate" 2>&1 | tee -a "$LOGFILE" || true
+    rm -rf "$kr_db" "$kr_cache" "$kr_conf"
 }
 
 detect_gpus() {
@@ -625,7 +665,6 @@ while true; do
             fi
         fi
 
-
         if [ "$BOOTLOADER" == "limine" ] && [ "$EFI_DIR" != "/boot" ]; then
             dialog --title "Bootloader Error" --msgbox "$BOOTLOADER keeps the kernel and initramfs on the EFI partition, so it must be mounted at /mnt/boot (not /mnt/boot/efi).\n\nRemount it there, or choose GRUB or rEFInd." 0 0; clear
             continue
@@ -687,6 +726,8 @@ while true; do
             if [ "$INIT" == "1" ]; then
                 sed -i 's/^#*ParallelDownloads = .*/ParallelDownloads = 12/' /etc/pacman.conf
                 
+                bootstrap_keyring archlinux-keyring /etc/pacman.conf archlinux
+
                 pacstrap -K /mnt base base-devel linux linux-firmware sof-firmware $BL_PKGS sudo --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
                 
                 if [ "$INIT_OK" == "true" ]; then
@@ -840,6 +881,9 @@ Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
 Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
+
+                bootstrap_keyring artix-keyring "$ARTIX_CONF" artix
+                bootstrap_keyring archlinux-keyring "$ARTIX_CONF" archlinux /etc/pacman.conf
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel openrc elogind-openrc linux linux-firmware sof-firmware $BL_PKGS pipewire pipewire-pulse wireplumber artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
@@ -1063,6 +1107,9 @@ Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
 Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
+
+                bootstrap_keyring artix-keyring "$ARTIX_CONF" artix
+                bootstrap_keyring archlinux-keyring "$ARTIX_CONF" archlinux /etc/pacman.conf
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel runit runit-rc elogind-runit linux linux-firmware sof-firmware $BL_PKGS artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
@@ -1294,6 +1341,9 @@ Server = https://artix.unixpeople.org/repos/\$repo/os/\$arch
 Server = https://artixlinux.mirror.garr.it/\$repo/os/\$arch
 Server = https://mirror.freedif.org/artix/\$repo/os/\$arch
 EOF
+
+                bootstrap_keyring artix-keyring "$ARTIX_CONF" artix
+                bootstrap_keyring archlinux-keyring "$ARTIX_CONF" archlinux /etc/pacman.conf
 
                 pacstrap -C "$ARTIX_CONF" /mnt base base-devel dinit elogind-dinit linux linux-firmware sof-firmware $BL_PKGS artix-keyring archlinux-keyring artix-mirrorlist sudo git --overwrite="*" 2>&1 | tee -a "$LOGFILE" || INIT_OK=false
 
